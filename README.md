@@ -122,6 +122,8 @@ app/   dashboard.py (Streamlit) · dashboard_cli.py
 tests/ test_pipeline.py · test_connectors.py (17 tes)
 data/  raw/sample_social_posts.csv · processed/detection.db
 docs/  arsitektur-sistem.md · uji-data-asli.md · benchmark.md
+proposal/ SENTINEL-proposal.pdf · slides/ SENTINEL-slides.pdf · video/ naskah-video.md
+assets/ thumbnail.png · screenshots/ (5 tangkapan layar)
 ```
 
 ## ⚖️ Etika & kepatuhan

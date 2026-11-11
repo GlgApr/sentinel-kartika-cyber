@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>SENTINEL — Slide</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @page { size: 1920px 1080px; margin: 0; }
+  :root { --bg:#121212; --panel:#1b1b1d; --line:#2e2e32; --ink:#ececee; --mute:#9a9aa2; --amber:#e3a33b; --red:#e5484d; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background: var(--bg); }
+  body { font-family: "IBM Plex Sans", sans-serif; color: var(--ink); }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .slide { width:1920px; height:1080px; padding: 96px 120px; position: relative; overflow: hidden; page-break-after: always; display:flex; flex-direction:column; justify-content:center; }
+  .slide:last-child { page-break-after: auto; }
+  .kicker { font-family: "IBM Plex Mono", monospace; color: var(--amber); font-size: 24px; letter-spacing: .5px; margin-bottom: 20px; }
+  h1 { font-size: 64px; line-height: 1.12; margin: 0 0 28px; font-weight: 600; letter-spacing: -1px; max-width: 1500px; }
+  h1 em { font-style: normal; color: var(--amber); }
+  p, li { font-size: 30px; line-height: 1.45; color: #d4d4d8; }
+  p { margin: 0 0 18px; max-width: 1450px; }
+  ul { margin: 0; padding-left: 34px; } li { margin-bottom: 14px; }
+  .mute { color: var(--mute); }
+  .foot { position:absolute; left:120px; right:120px; bottom:44px; display:flex; justify-content:space-between; font-family:"IBM Plex Mono", monospace; font-size:18px; color:#66666d; }
+  .cols { display:grid; grid-template-columns: 1fr 1fr; gap: 56px; flex:1; }
+  .cols3 { display:grid; grid-template-columns: repeat(3,1fr); gap: 32px; }
+  .card { background: var(--panel); border:1px solid var(--line); border-radius: 14px; padding: 32px 34px; }
+  .card h3 { font-size: 32px; margin: 0 0 12px; }
+  .card p { font-size: 25px; margin:0; color:#c4c4ca; }
+  .card .k { font-family:"IBM Plex Mono", monospace; color: var(--amber); font-size: 22px; margin-bottom: 10px; display:block; }
+  .shot { width:100%; border-radius: 12px; border:1px solid var(--line); display:block; }
+  table { border-collapse: collapse; width: 100%; font-size: 28px; }
+  th, td { padding: 18px 20px; border-bottom: 1px solid var(--line); text-align:left; }
+  th { color: var(--mute); font-weight: 500; font-size: 22px; }
+  td.n, th.n { text-align:right; font-variant-numeric: tabular-nums; }
+  tr.hl td { color: #fff; font-weight: 600; background: rgba(227,163,59,.10); }
+  .big { font-size: 150px; font-weight: 600; line-height: 1; letter-spacing: -3px; }
+  .bar { height: 46px; border-radius: 6px; display:flex; align-items:center; padding-left: 16px; font-family:"IBM Plex Mono", monospace; font-size: 24px; color:#111; font-weight:500; }
+  .pipe { display:flex; gap: 14px; align-items:stretch; margin-top: 30px; }
+  .pipe .card { flex:1; padding: 24px 22px; }
+  .pipe .card h3 { font-size: 26px; } .pipe .card p { font-size: 21px; }
+  .arrow { align-self:center; color: var(--mute); font-size: 34px; }
+  .tick { display:inline-block; width:14px; height:14px; border-radius:50%; background: var(--red); margin-right: 12px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<!-- 1 judul -->
+<div class="slide" style="justify-content:center">
+  <div style="display:flex;align-items:center;gap:28px;margin-bottom:44px">
+    <svg width="96" height="96" viewBox="0 0 46 46"><circle cx="23" cy="23" r="21" fill="none" stroke="#ececee" stroke-width="2.2"/><circle cx="23" cy="23" r="12" fill="none" stroke="#ececee" stroke-width="2.2"/><circle cx="23" cy="23" r="4.5" fill="#e3a33b"/></svg>
+    <div style="font-size:96px;font-weight:700;letter-spacing:4px">SENTINEL</div>
+  </div>
+  <h1 style="font-size:58px;max-width:1400px">Deteksi operasi pengaruh terkoordinasi di ruang siber sosial, <em>dengan bukti yang bisa dipertanggungjawabkan</em></h1>
+  <p class="mute" style="font-size:28px">Kartika Cyber Hackathon 2026 · Kategori Siber Sosial · [NAMA TIM]</p>
+  <div class="foot"><span>sentinel-kartika-cyber.streamlit.app</span><span>github.com/GlgApr/sentinel-kartika-cyber</span></div>
+</div>
+
+<!-- 2 masalah -->
+<div class="slide">
+  <div class="kicker">01 · MASALAH</div>
+  <h1>Viral organik dan viral rekayasa <em>terlihat sama</em> di dashboard monitoring</h1>
+  <div class="cols3" style="margin-top:30px">
+    <div class="card"><span class="k">ANCAMAN</span><h3>Hoaks mencatut TNI AD</h3><p>Rekrutmen "jalur khusus", tautan pendaftaran palsu, disebar puluhan akun dalam hitungan menit.</p></div>
+    <div class="card"><span class="k">PENGHINDARAN</span><h3>Operator menghindari filter</h3><p>Teks divariasikan, huruf <span class="mono">𝐆𝐀𝐌𝐄𝟏𝟗𝟏</span>, angka <span class="mono">➋➐</span>, homoglyph <span class="mono">VlKlNG27</span>, dieja <span class="mono">u b e t 9 6</span>.</p></div>
+    <div class="card"><span class="k">AKUNTABILITAS</span><h3>Tidak boleh salah tuduh</h3><p>Institusi negara harus netral politik dan bisa menjelaskan setiap temuan ke pimpinan.</p></div>
+  </div>
+  <p style="margin-top:44px">Alat berbasis volume menandai berita gempa dan kampanye buzzer sekaligus. Analis tenggelam dalam alarm palsu.</p>
+  <div class="foot"><span>SENTINEL</span><span>2</span></div>
+</div>
+
+<!-- 3 ide -->
+<div class="slide">
+  <div class="kicker">02 · IDE INTI</div>
+  <h1>Jangan nilai isi opini. Nilai <em>cara akun bertindak bersama</em>.</h1>
+  <div class="cols3" style="margin-top:30px">
+    <div class="card"><span class="k">SERENTAK</span><h3>≤ 20 menit</h3><p>Akun berbeda memposting narasi mirip, URL sama, atau kode merek langka yang sama hampir bersamaan.</p></div>
+    <div class="card"><span class="k">BERULANG</span><h3>≥ 2 kesempatan</h3><p>Kelompok yang sama beraksi lagi di gelombang lain. Ribuan orang membahas gempa, tetapi tidak dengan kelompok yang sama berulang kali.</p></div>
+    <div class="card"><span class="k">SERAGAM</span><h3>Templat + target</h3><p>Templat teks tetap sambil memutar target, bahkan bila tersebar berhari-hari tanpa keserempakan.</p></div>
+  </div>
+  <p style="margin-top:44px">Tanpa data latih: langsung bekerja pada narasi baru hari ini, dan netral terhadap opini.</p>
+  <div class="foot"><span>SENTINEL</span><span>3</span></div>
+</div>
+
+<!-- 4 ancaman screenshot -->
+<div class="slide" style="padding-top:70px">
+  <div class="kicker">03 · ALUR ANALIS · ANCAMAN</div>
+  <div style="display:grid;grid-template-columns: 1.55fr 1fr;gap:56px;align-items:start">
+    <img class="shot" src="../assets/screenshots/1-ancaman.png">
+    <div>
+      <h1 style="font-size:48px">Antrean ancaman, diurutkan risiko</h1>
+      <ul>
+        <li>Merah: post dari jaringan terkoordinasi</li>
+        <li>Lonjakan abu-abu tertinggi adalah berita gempa organik, <b>sengaja tidak ditandai</b></li>
+        <li>Klik satu baris untuk membuka berkas kasus</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>SENTINEL</span><span>4</span></div>
+</div>
+
+<!-- 5 kasus -->
+<div class="slide" style="padding-top:70px">
+  <div class="kicker">03 · ALUR ANALIS · BERKAS KASUS</div>
+  <div style="display:grid;grid-template-columns: 1.55fr 1fr;gap:56px;align-items:start">
+    <div style="height:820px;overflow:hidden;border-radius:12px"><img class="shot" src="../assets/screenshots/2-kasus-bukti.png"></div>
+    <div>
+      <h1 style="font-size:48px">Setiap skor punya alasan</h1>
+      <ul>
+        <li><b>Barcode sinkronisasi</b>: garis vertikal = akun berbeda memposting di menit yang sama</li>
+        <li>Kontribusi 5 sinyal: konten, waktu, profil, jaringan, amplifikasi</li>
+        <li>Temuan tertulis dalam Bahasa Indonesia</li>
+        <li>Bukti diunduh dengan hash <b>SHA-256</b> (chain of custody), laporan intelijen siap kirim</li>
+        <li>Keputusan analis tercatat</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>SENTINEL</span><span>5</span></div>
+</div>
+
+<!-- 6 pipeline -->
+<div class="slide">
+  <div class="kicker">04 · CARA KERJA</div>
+  <h1>Pipeline ringan, tanpa GPU, &lt; 1 detik untuk 1.700 post</h1>
+  <div class="pipe">
+    <div class="card"><span class="k">1</span><h3>Normalisasi</h3><p>NFKC, angka dekoratif, semua aksara, slang, kunci homoglyph</p></div><div class="arrow">→</div>
+    <div class="card"><span class="k">2</span><h3>Co-action</h3><p>TF-IDF char 3–5; jendela 20 menit: teks mirip, URL, mention/kode merek</p></div><div class="arrow">→</div>
+    <div class="card"><span class="k">3</span><h3>Graf berulang</h3><p>Edge hanya bila pasangan ≥ 2 episode atau motif ≥ 2 gelombang</p></div><div class="arrow">→</div>
+    <div class="card"><span class="k">4</span><h3>Operasi templat</h3><p>Graf templat ↔ target dengan syarat rotasi</p></div><div class="arrow">→</div>
+    <div class="card"><span class="k">5</span><h3>Louvain + k-core</h3><p>Memisahkan operasi</p></div><div class="arrow">→</div>
+    <div class="card"><span class="k">6</span><h3>Skor 5 sinyal</h3><p>Ambang 0,55 · tinggi ≥ 0,75 · analis memutuskan</p></div>
+  </div>
+  <p style="margin-top:50px" class="mute">Python · SQLite · scikit-learn · networkx · Streamlit · Plotly. Data live: TikTok, YouTube, X, Threads, Instagram (ScrapeCreators), Mastodon. Unggah CSV/JSON untuk jaringan tertutup.</p>
+  <div class="foot"><span>SENTINEL</span><span>6</span></div>
+</div>
+
+<!-- 7 perjalanan -->
+<div class="slide">
+  <div class="kicker">05 · UJI DATA ASLI</div>
+  <h1>Versi pertama di data asli menangkap <em>0</em> akun spam</h1>
+  <p>±8.000 komentar TikTok Indonesia dari 95 video, akun spam judi online diperiksa manual.</p>
+  <table style="margin-top:20px">
+    <tr><th style="width:12%">Versi</th><th>Yang ditemukan di data asli</th><th style="width:38%">Perbaikan</th></tr>
+    <tr><td class="mono">v1</td><td>Huruf Thai, emoji, unicode "fancy" terbuang; yang berulang adalah <b>kelompok</b>, bukan pasangan</td><td>NFKC + semua aksara; kode merek; motif lintas gelombang</td></tr>
+    <tr><td class="mono">v2</td><td><span class="mono">VlKlNG27</span> ≠ <span class="mono">𝐕𝐈𝐊𝐈𝐍𝐆➋➐</span>; <span class="mono">laki2</span> dikira kode merek; spam "tetes lambat" recall 0 %</td><td>Kunci skeleton; pengecualian kata ulang; detektor operasi templat</td></tr>
+    <tr class="hl"><td class="mono">v3</td><td colspan="2">Kode dibekukan, hash dicatat, <b>baru</b> data uji ditarik → F1 94 %</td></tr>
+  </table>
+  <div class="foot"><span>SENTINEL</span><span>7</span></div>
+</div>
+
+<!-- 8 hasil -->
+<div class="slide">
+  <div class="kicker">05 · UJI DATA ASLI · HELD-OUT</div>
+  <h1>F1 94 %, precision 100 %, <em>0 akun dituduh salah</em></h1>
+  <div style="display:grid;grid-template-columns: 1.2fr 1fr; gap:70px; margin-top:20px">
+    <div>
+      <p class="mute" style="font-size:24px">F1 · 2.002 komentar held-out · 69 akun spam</p>
+      <div style="margin:22px 0 10px;font-size:26px">SENTINEL</div><div class="bar" style="width:94%;background:var(--amber)">94 %</div>
+      <div style="margin:30px 0 10px;font-size:26px">Filter teks kembar</div><div class="bar" style="width:18%;background:#6b6b72;color:#fff">18 %</div>
+      <div style="margin:30px 0 10px;font-size:26px">Pemantau lonjakan</div><div class="bar" style="width:8%;background:#4a4a50;color:#fff;min-width:90px">8 %</div>
+    </div>
+    <div>
+      <table>
+        <tr><th>Akun dituduh salah</th><th class="n"></th></tr>
+        <tr class="hl"><td>SENTINEL</td><td class="n">0</td></tr>
+        <tr><td>Filter teks kembar</td><td class="n">124</td></tr>
+        <tr><td>Pemantau lonjakan</td><td class="n">1.617</td></tr>
+      </table>
+      <p style="margin-top:30px;font-size:26px">6 operasi judi online tertangkap. Slogan politik yang diulang 7 akun <b>tidak</b> ditandai: tidak ada bukti koordinasi.</p>
+    </div>
+  </div>
+  <div class="foot"><span>SENTINEL</span><span>8</span></div>
+</div>
+
+<!-- 9 pola nyata -->
+<div class="slide">
+  <div class="kicker">05 · POLA OPERASI YANG DITEMUKAN</div>
+  <h1>Tiga pola operasi nyata di TikTok Indonesia</h1>
+  <div class="cols3" style="margin-top:20px">
+    <div class="card"><span class="k">GELOMBANG SERENTAK</span><h3>3–5 akun, ≤ 10 menit</h3><p><span class="mono">@&lt;KODE&gt; คืออะไรหรอ</span> ("kode ini apa?"), kode berganti tiap gelombang.</p></div>
+    <div class="card"><span class="k">MOTIF BERULANG</span><h3>Pujian palsu + mention</h3><p>Akun bernama wajar menulis <span class="mono">💜 suka banget sama editingnya!</span> + mention merek, berulang di hari berbeda.</p></div>
+    <div class="card"><span class="k">TETES LAMBAT</span><h3>Templat tetap, merek berputar</h3><p>Puluhan akun selama berminggu-minggu memutar 10–15 kode merek. Tidak ada keserempakan sama sekali.</p></div>
+  </div>
+  <p style="margin-top:40px">Ketiganya kini jadi tes regresi otomatis. Benchmark sintetis tetap terjaga: F1 100 / 100 / 95 % di tiga tingkat penyamaran.</p>
+  <div class="foot"><span>SENTINEL</span><span>9</span></div>
+</div>
+
+<!-- 10 batas -->
+<div class="slide">
+  <div class="kicker">06 · YANG BELUM BISA</div>
+  <h1>Kami ungkap batasnya, <em>bukan menyembunyikannya</em></h1>
+  <ul style="margin-top:16px;list-style:none;padding-left:0">
+    <li><span class="tick"></span><b>Skor per akun tidak andal.</b> Di dataset bot berlabel Cresci-2017, AUC 0,32–0,55 (setara acak). Profil akun kini lembar konteks; bukti sah = keanggotaan dalam operasi.</li>
+    <li><span class="tick"></span><b>Bot retweet tidak serentak</b> baru tertangkap 29 %. Solusi: jaringan co-share lintas konten (Pacheco dkk., 2021).</li>
+    <li><span class="tick"></span><b>Alarm palsu</b>: kerumunan asli yang menjawab satu akun pemancing di menit yang sama. Karena itu analis tetap memutuskan.</li>
+    <li><span class="tick"></span><b>Spam satu merek, satu templat</b> sengaja tidak ditandai: secara struktur sama dengan kutipan organik.</li>
+  </ul>
+  <div class="foot"><span>SENTINEL</span><span>10</span></div>
+</div>
+
+<!-- 11 kelayakan -->
+<div class="slide">
+  <div class="kicker">07 · KELAYAKAN DI SATUAN</div>
+  <h1>Siap dipasang di jaringan tertutup</h1>
+  <div class="cols3" style="margin-top:20px">
+    <div class="card"><span class="k">RINGAN</span><h3>Laptop biasa</h3><p>Python + SQLite, tanpa GPU dan tanpa cloud. Satu perintah <span class="mono">./run.sh</span>. 17 tes otomatis.</p></div>
+    <div class="card"><span class="k">ETIS</span><h3>Netral & human-in-the-loop</h3><p>Menilai perilaku, bukan opini. Tidak ada tindakan otomatis. Mode Presentasi menyamarkan username.</p></div>
+    <div class="card"><span class="k">AUDITABLE</span><h3>Bukti sah</h3><p>Hash SHA-256, run dan keputusan analis tercatat, parameter di satu berkas konfigurasi.</p></div>
+  </div>
+  <p style="margin-top:44px"><b>Berikutnya:</b> lensa co-share · Telegram & near-real-time · IndoBERT untuk parafrase berat · deteksi meme duplikat · RBAC dan audit log</p>
+  <div class="foot"><span>SENTINEL</span><span>11</span></div>
+</div>
+
+<!-- 12 penutup -->
+<div class="slide" style="justify-content:center">
+  <div class="kicker">COBA SEKARANG</div>
+  <h1 style="font-size:72px">Bukan "berapa banyak yang membicarakan", tetapi <em>"siapa yang bergerak bersama"</em>.</h1>
+  <div style="margin-top:40px;font-size:32px;line-height:1.8" class="mono">
+    <div><span class="mute">Demo&nbsp;&nbsp;</span> sentinel-kartika-cyber.streamlit.app</div>
+    <div><span class="mute">Kode&nbsp;&nbsp;</span> github.com/GlgApr/sentinel-kartika-cyber</div>
+  </div>
+  <div class="foot"><span>SENTINEL · [NAMA TIM]</span><span>12</span></div>
+</div>
+
+</body>
+</html>

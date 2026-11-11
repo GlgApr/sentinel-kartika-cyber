@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>SENTINEL — Proposal</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 18mm 18mm 18mm 18mm; }
+  :root { --ink:#1b1b1d; --mute:#5d5d63; --line:#dcdcdf; --soft:#f4f4f5; --amber:#c27c12; --amber-soft:#fbf1e1; --red:#c9383e; }
+  * { box-sizing: border-box; }
+  body { font-family: "IBM Plex Sans", sans-serif; color: var(--ink); font-size: 10pt; line-height: 1.45; margin: 0; background:#fff; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  h1 { font-size: 30pt; margin: 0; letter-spacing: -0.5px; }
+  h2 { font-size: 15pt; margin: 0 0 8px; padding-top: 2px; }
+  h2 .n { color: var(--amber); font-family: "IBM Plex Mono", monospace; font-weight: 500; margin-right: 8px; }
+  h3 { font-size: 11pt; margin: 14px 0 4px; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 18px; }
+  li { margin-bottom: 3px; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  section { margin-bottom: 18px; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 10px; font-size: 9pt; }
+  th, td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.hl td { background: var(--amber-soft); font-weight: 600; }
+  .callout { border-left: 3px solid var(--amber); background: var(--amber-soft); padding: 8px 12px; margin: 8px 0 12px; }
+  .warn { border-left: 3px solid var(--red); background: #fbecec; padding: 8px 12px; margin: 8px 0 12px; }
+  .caption { color: var(--mute); font-size: 8.5pt; margin-top: 3px; }
+  figure { margin: 8px 0 12px; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 4px; display:block; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 14px; }
+  .kpi { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .kpi b { display:block; font-size: 18pt; line-height: 1.1; }
+  .kpi span { color: var(--mute); font-size: 8.5pt; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; margin: 8px 0 12px; }
+  .step { flex: 1 1 0; border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; font-size: 8.5pt; min-width: 0; }
+  .step b { display: block; font-size: 9pt; margin-bottom: 2px; }
+  .step .k { font-family: "IBM Plex Mono", monospace; color: var(--amber); font-size: 8pt; }
+  .arrow { align-self: center; color: var(--mute); }
+  /* cover */
+  .cover { height: 255mm; display: flex; flex-direction: column; justify-content: space-between; }
+  .cover .top { font-family: "IBM Plex Mono", monospace; color: var(--mute); font-size: 9.5pt; }
+  .cover .mark { display:flex; align-items:center; gap:12px; margin-bottom: 18px; }
+  .cover .tag { font-size: 14pt; color: var(--mute); margin-top: 10px; max-width: 150mm; }
+  .cover .meta td { border: none; padding: 3px 0; }
+  .cover .meta td:first-child { color: var(--mute); width: 38mm; }
+</style>
+</head>
+<body>
+
+<!-- ====================== SAMPUL ====================== -->
+<div class="page cover">
+  <div class="top">KARTIKA CYBER HACKATHON 2026 · KATEGORI SIBER SOSIAL · PROPOSAL KARYA</div>
+  <div>
+    <div class="mark">
+      <svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="21" fill="none" stroke="#1b1b1d" stroke-width="2.5"/><circle cx="23" cy="23" r="12" fill="none" stroke="#1b1b1d" stroke-width="2.5"/><circle cx="23" cy="23" r="4.5" fill="#c27c12"/></svg>
+      <h1>SENTINEL</h1>
+    </div>
+    <div style="font-size:19pt;font-weight:600;max-width:160mm;line-height:1.3">Deteksi operasi pengaruh terkoordinasi di ruang siber sosial, dengan bukti yang bisa dipertanggungjawabkan</div>
+    <div class="tag">Menemukan jaringan akun yang bergerak serentak, berulang, dan seragam (buzzer, sockpuppet, spam judi online) lalu menjelaskan alasannya dalam Bahasa Indonesia untuk analis siber TNI AD.</div>
+  </div>
+  <div>
+    <div class="kpis">
+      <div class="kpi"><b>94 %</b><span>F1 pada komentar TikTok asli (held-out)</span></div>
+      <div class="kpi"><b>100 %</b><span>precision: 0 akun organik dituduh</span></div>
+      <div class="kpi"><b>8–18 %</b><span>F1 dua pendekatan umum pada data yang sama</span></div>
+      <div class="kpi"><b>&lt; 1 dtk</b><span>proses 1.700 post, tanpa GPU</span></div>
+    </div>
+    <table class="meta">
+      <tr><td>Tim</td><td><b>[NAMA TIM]</b> · [Nama anggota 1], [Nama anggota 2], [Nama anggota 3]</td></tr>
+      <tr><td>Demo online</td><td class="mono">sentinel-kartika-cyber.streamlit.app</td></tr>
+      <tr><td>Kode sumber</td><td class="mono">github.com/GlgApr/sentinel-kartika-cyber</td></tr>
+      <tr><td>Tanggal</td><td>November 2026</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ====================== 1–2 ====================== -->
+<div class="page">
+<section>
+  <h2><span class="n">01</span>Ringkasan</h2>
+  <p>Operasi pengaruh di media sosial Indonesia tidak lagi dilakukan satu akun. Puluhan akun palsu memposting narasi yang sama dalam hitungan menit agar terlihat seperti suara publik. Bagi TNI AD, wujudnya antara lain hoaks rekrutmen "jalur khusus" yang mencatut nama institusi, disinformasi yang memicu kepanikan, phishing berkedok bansos, dan jaringan spam judi online yang membanjiri kolom komentar.</p>
+  <p><b>SENTINEL</b> tidak menghitung volume atau sentimen. SENTINEL mencari <b>bukti koordinasi</b>: sekelompok akun yang bertindak <i>serentak</i>, <i>berulang</i>, dan <i>seragam</i>. Setiap temuan dikemas sebagai berkas kasus berisi skor, alasan tertulis, barcode sinkronisasi, peta jaringan, bukti ber-hash SHA-256, dan laporan intelijen siap kirim. Keputusan akhir tetap di tangan analis.</p>
+  <div class="callout"><b>Diuji di data asli, bukan hanya di atas kertas.</b> Versi awal SENTINEL menangkap <b>0</b> akun spam pada komentar TikTok asli. Setelah lima kelemahan ditemukan dan diperbaiki, versi yang kodenya dibekukan sebelum data baru ditarik mencapai <b>F1 94 % dengan precision 100 %</b> pada 2.002 komentar held-out. Dua pendekatan umum (filter teks kembar dan pemantau lonjakan) hanya 18 % dan 8 %, sambil menuduh 124 dan 1.617 akun yang tidak bersalah.</div>
+</section>
+
+<section>
+  <h2><span class="n">02</span>Masalah dan relevansi bagi TNI AD</h2>
+  <p>Analis siber menghadapi tiga hambatan yang tidak terselesaikan oleh dashboard monitoring biasa:</p>
+  <ol>
+    <li><b>Viral organik dan viral rekayasa terlihat sama.</b> Berita gempa dan kampanye buzzer sama-sama menghasilkan lonjakan volume. Alat berbasis volume akan menandai keduanya, sehingga analis tenggelam dalam alarm palsu.</li>
+    <li><b>Operator sengaja menghindari filter.</b> Teks divariasikan sedikit demi sedikit, ditulis dengan huruf unicode "fancy" (<span class="mono">𝐆𝐀𝐌𝐄𝟏𝟗𝟏</span>), angka dekoratif (<span class="mono">➋➐</span>), homoglyph (<span class="mono">VlKlNG27</span> untuk VIKING27), atau dieja terpisah (<span class="mono">u b e t 9 6</span>). Filter teks kembar meloloskannya.</li>
+    <li><b>Temuan harus bisa dipertanggungjawabkan.</b> Sebagai institusi negara, TNI AD tidak boleh menuduh warga tanpa dasar dan harus netral terhadap opini politik. Skor "kotak hitam" tidak bisa dibawa ke pimpinan.</li>
+  </ol>
+  <h3>Skenario penggunaan</h3>
+  <table>
+    <tr><th style="width:32%">Ancaman</th><th>Yang dilakukan SENTINEL</th></tr>
+    <tr><td>Hoaks rekrutmen mencatut TNI AD</td><td>Menemukan kelompok akun yang serentak menyebar tautan pendaftaran palsu yang sama, lalu menyusun laporan dan bukti untuk take-down.</td></tr>
+    <tr><td>Astroturfing tagar pemicu panik</td><td>Membedakan tagar yang didorong jaringan terjadwal dari percakapan organik di waktu yang sama.</td></tr>
+    <tr><td>Phishing berkedok bansos</td><td>Menghubungkan akun-akun baru yang memutar domain phishing yang sama.</td></tr>
+    <tr><td>Jaringan spam judi online</td><td>Menangkap operasi yang memutar puluhan kode merek dengan templat tetap, termasuk yang menyebar berhari-hari tanpa posting serentak.</td></tr>
+  </table>
+</section>
+
+
+</div>
+
+<!-- ====================== 3 (screens) ====================== -->
+<div class="page">
+<section>
+  <h2><span class="n">03</span>Solusi: alur kerja analis</h2>
+  <p>Dashboard mengikuti alur alat investigasi CIB profesional: <b>antrean ancaman → berkas kasus → tindakan</b>.</p>
+  <div class="flow">
+    <div class="step"><span class="k">1 · Sumber data</span><b>Tarik atau unggah</b>Data live TikTok, YouTube, X, Threads, Instagram, Mastodon; unggah CSV/JSON; skenario demo.</div><div class="arrow">→</div>
+    <div class="step"><span class="k">2 · Ancaman</span><b>Antrean terurut risiko</b>Status siaga, timeline organik vs terkoordinasi, kasus diurutkan skor.</div><div class="arrow">→</div>
+    <div class="step"><span class="k">3 · Kasus</span><b>Bukti dan alasan</b>Skor 5 sinyal, barcode sinkronisasi, jaringan, akun, bukti + SHA-256.</div><div class="arrow">→</div>
+    <div class="step"><span class="k">4 · Tindakan</span><b>Keputusan analis</b>Tinjau, eskalasi, atau abaikan; laporan intelijen siap kirim.</div>
+  </div>
+</section>
+  <figure><img src="../assets/screenshots/1-ancaman.png" style="height:84mm;object-fit:cover;object-position:top"><div class="caption">Gambar 1. Halaman Ancaman. Batang merah adalah post dari jaringan terkoordinasi; lonjakan abu-abu tertinggi adalah berita gempa organik dan sengaja tidak ditandai.</div></figure>
+  <figure><img src="../assets/screenshots/2-kasus-bukti.png" style="height:84mm;object-fit:cover;object-position:top"><div class="caption">Gambar 2. Berkas kasus. Barcode sinkronisasi (setiap garis satu post; garis yang berbaris vertikal berarti akun berbeda memposting di menit yang sama), kontribusi lima sinyal, dan temuan tertulis.</div></figure>
+</div>
+
+<!-- ====================== 4 cara kerja ====================== -->
+<div class="page">
+<section>
+  <h2><span class="n">04</span>Cara kerja</h2>
+  <p>SENTINEL menilai <b>perilaku</b>, bukan isi opini. Pertanyaannya bukan "apakah narasi ini benar?", tetapi "apakah sekelompok akun bertindak bersama dengan cara yang tidak terjadi secara alami?".</p>
+  <table>
+    <tr><th style="width:4%">#</th><th style="width:18%">Tahap</th><th style="width:44%">Teknik</th><th>Alasan</th></tr>
+    <tr><td>1</td><td>Normalisasi</td><td>NFKC, angka dekoratif → angka biasa, semua aksara (Thai, Arab, …) dipertahankan, kamus slang (<span class="mono">yg→yang</span>), kunci skeleton homoglyph</td><td>Menyamakan trik ejaan operator dan spammer</td></tr>
+    <tr><td>2</td><td>Representasi</td><td>TF-IDF char n-gram 3–5</td><td>Tahan typo dan parafrase ringan, tanpa GPU</td></tr>
+    <tr><td>3</td><td>Co-action</td><td>Jendela ≤ 20 menit: narasi mirip (cosine ≥ 0,60), URL sama, atau tagar/mention/kode merek langka sama</td><td>Koordinasi = aksi yang hampir bersamaan</td></tr>
+    <tr><td>4</td><td>Graf koordinasi</td><td>Edge hanya jika <b>berulang</b>: pasangan akun di ≥ 2 episode terpisah, atau motif (templat + target) sama di ≥ 2 gelombang</td><td>Satu kebetulan atau event viral tidak cukup</td></tr>
+    <tr><td>5</td><td>Operasi templat</td><td>Graf bipartit templat ↔ target; syarat rotasi (satu templat untuk ≥ 2 merek, atau satu merek lewat ≥ 2 templat)</td><td>Spam "tetes lambat" berhari-hari tanpa keserempakan</td></tr>
+    <tr><td>6</td><td>Clustering</td><td>Louvain + 2-core</td><td>Memisahkan operasi, membuang akun yang ikut secara kebetulan</td></tr>
+    <tr><td>7</td><td>Skor</td><td>Konten 30 %, waktu 25 %, profil akun 20 %, jaringan 15 %, amplifikasi 10 %; ambang 0,55, risiko tinggi ≥ 0,75</td><td>Skor transparan yang bisa dijelaskan</td></tr>
+    <tr><td>8</td><td>Triage</td><td>Keputusan analis tercatat, laporan, hash bukti</td><td>Manusia tetap memutuskan</td></tr>
+  </table>
+  <p class="caption">Bila data profil akun tidak tersedia (misalnya data komentar), sinyal profil tidak dihitung dan bobot lain dinormalisasi ulang, sehingga "tidak tahu" tidak diperlakukan sebagai "normal".</p>
+</section>
+
+<section>
+  <h2><span class="n">05</span>Kebaruan</h2>
+  <ol>
+    <li><b>Tidak butuh data latih, dan itu disengaja.</b> Model berlabel (seperti Botometer) hanya mengenali pola yang pernah dilihat dan mewarisi bias pelabelnya. Aturan perilaku SENTINEL langsung bekerja pada narasi baru hari ini dan netral terhadap opini.</li>
+    <li><b>Kriteria "koordinasi berulang".</b> Inilah yang membedakan viral rekayasa dari viral organik: ribuan orang bisa membahas gempa di jam yang sama, tetapi tidak dengan kelompok yang sama berulang kali.</li>
+    <li><b>Tiga pola operasi nyata</b>, semuanya ditemukan di data TikTok Indonesia: gelombang serentak, motif yang berulang lintas gelombang dengan kode berganti, dan operasi templat "tetes lambat" tanpa keserempakan.</li>
+    <li><b>Dibuat untuk medsos Indonesia</b>: slang, kata ulang (<span class="mono">laki2</span> bukan kode merek), satuan (<span class="mono">5kg</span>), huruf unicode "fancy", angka dekoratif, homoglyph.</li>
+    <li><b>Explainable dan siap pengadilan</b>: setiap skor punya alasan tertulis Bahasa Indonesia; bukti diunduh dengan sidik jari SHA-256 (<i>chain of custody</i>).</li>
+    <li><b>Jujur terhadap batasnya</b>: kegagalan yang ditemukan saat pengujian dicatat terbuka (Bagian 06), bukan disembunyikan.</li>
+  </ol>
+</section>
+</div>
+
+<!-- ====================== 5 hasil uji ====================== -->
+<div class="page">
+<section>
+  <h2><span class="n">06</span>Hasil uji</h2>
+  <h3>a. Data asli: komentar TikTok Indonesia</h3>
+  <p>±8.000 komentar publik dari 95 video (topik: TNI AD, rekrutmen, judi online, DPR, timnas, harga beras, dan lain-lain) ditarik lewat ScrapeCreators. Setiap akun spam diperiksa manual. Untuk uji akhir, <b>kode dibekukan dan hash-nya dicatat sebelum data baru ditarik</b>, sehingga tidak ada penyetelan pada data uji.</p>
+  <table>
+    <tr><th>Metode (held-out, 2.002 komentar, 69 akun spam)</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">Akun dituduh salah</th></tr>
+    <tr class="hl"><td>SENTINEL</td><td class="num">100 %</td><td class="num">88 %</td><td class="num">94 %</td><td class="num">0</td></tr>
+    <tr><td>Filter teks kembar (duplicate filter)</td><td class="num">13 %</td><td class="num">28 %</td><td class="num">18 %</td><td class="num">124</td></tr>
+    <tr><td>Pemantau lonjakan (burst monitor)</td><td class="num">4 %</td><td class="num">99 %</td><td class="num">8 %</td><td class="num">1.617</td></tr>
+  </table>
+  <p>Enam operasi judi online berbeda tertangkap. Di seluruh 8.000+ komentar <b>tidak ada akun organik yang dituduh</b>; slogan politik yang diulang banyak akun ("nkri harga mati" oleh 7 akun) tidak ditandai karena tidak ada bukti koordinasi, sementara filter teks kembar menuduh semuanya.</p>
+
+  <h3>b. Perjalanan perbaikan</h3>
+  <table>
+    <tr><th style="width:12%">Versi</th><th>Yang ditemukan di data asli</th><th style="width:34%">Perbaikan</th></tr>
+    <tr><td>v1</td><td><b>0 tertangkap.</b> Normalisasi membuang huruf Thai, emoji, dan unicode "fancy"; syarat pasangan berulang terlalu ketat karena yang berulang adalah kelompoknya</td><td>NFKC + semua aksara; mention/kode merek sebagai target; pengulangan level motif</td></tr>
+    <tr><td>v2</td><td>Skor operasi nyata 0,543 (lolos tipis); <span class="mono">laki2</span> terbaca kode merek; homoglyph tidak dikenali; recall 0 % pada spam "tetes lambat"</td><td>Amplifikasi diperluas; pengecualian kata ulang/satuan; kunci skeleton; detektor operasi templat</td></tr>
+    <tr><td>v3 (beku)</td><td colspan="2"><b>Held-out: precision 100 %, recall 88 %, F1 94 %</b></td></tr>
+  </table>
+
+  <h3>c. Skenario sintetis berlabel (pagar regresi)</h3>
+  <table>
+    <tr><th>Tingkat penyamaran (rata-rata 5 seed)</th><th class="num">SENTINEL F1</th><th class="num">Burst monitor F1</th><th class="num">Duplicate filter F1</th></tr>
+    <tr><td>0,0 (normal)</td><td class="num"><b>100 %</b></td><td class="num">22 %</td><td class="num">36 %</td></tr>
+    <tr><td>0,5</td><td class="num"><b>100 %</b></td><td class="num">18 %</td><td class="num">35 %</td></tr>
+    <tr><td>1,0 (operator sangat rapi)</td><td class="num"><b>95 %</b></td><td class="num">16 %</td><td class="num">34 %</td></tr>
+  </table>
+  
+
+  <h3>d. Yang belum bisa (diungkap terbuka)</h3>
+  <div class="warn">
+    <ul style="margin:0">
+      <li><b>Skor per akun tidak andal.</b> Pada dataset bot Twitter berlabel Cresci-2017, skor buzzer per akun tidak lebih baik dari acak (AUC 0,32–0,55). Halaman <i>Profil akun</i> karena itu diposisikan sebagai lembar konteks; bukti yang sah adalah keanggotaan dalam operasi terkoordinasi.</li>
+      <li><b>Bot retweet tidak serentak</b> baru tertangkap 29 % (Cresci social spambots #1). Solusinya jaringan <i>co-share</i> lintas konten (Pacheco dkk., 2021), masuk rencana pengembangan.</li>
+      <li><b>Satu mode alarm palsu:</b> kerumunan asli yang menjawab satu akun pemancing di menit yang sama. Ini alasan setiap flag tetap melalui keputusan analis.</li>
+      <li>Spam satu merek dengan satu templat sengaja tidak ditandai karena secara struktur sama dengan kutipan atau meme organik.</li>
+    </ul>
+  </div>
+</section>
+</div>
+
+<!-- ====================== 6 kelayakan ====================== -->
+<div class="page">
+<section>
+  <h2><span class="n">07</span>Kelayakan implementasi di satuan</h2>
+  <div class="grid2">
+    <div>
+      <h3>Ringan dan bisa on-premise</h3>
+      <ul>
+        <li>Python + SQLite, tanpa GPU dan tanpa layanan cloud berbayar. 1.700 post diproses kurang dari 1 detik di laptop biasa.</li>
+        <li>Bisa dijalankan di jaringan tertutup satuan: data diunggah sebagai CSV/JSON dari alat pengumpul yang sudah dipakai.</li>
+        <li>Instalasi satu perintah (<span class="mono">./run.sh</span>); 17 tes otomatis.</li>
+      </ul>
+      <h3>Terukur dan dapat diaudit</h3>
+      <ul>
+        <li>Semua parameter (jendela waktu, ambang, bobot) ada di satu berkas konfigurasi.</li>
+        <li>Setiap run deteksi tercatat; keputusan analis dipertahankan antar-run.</li>
+        <li>Bukti ber-hash SHA-256 untuk keperluan hukum dan take-down.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Etika dan kepatuhan</h3>
+      <ul>
+        <li><b>Netral politik</b>: yang dinilai cara bertindak, bukan isi opini atau afiliasi.</li>
+        <li><b>Human-in-the-loop</b>: skor adalah rekomendasi; tidak ada tindakan otomatis terhadap akun.</li>
+        <li><b>Data pribadi</b>: demo memakai data sintetis fiktif. Mode Presentasi menyamarkan username dan tidak menyimpan avatar/URL. Data uji asli tidak disimpan di repositori (UU PDP, rulebook).</li>
+      </ul>
+      <h3>Rencana pengembangan</h3>
+      <ol>
+        <li>Lensa <i>co-share</i> untuk bot berbagi-ulang yang tidak serentak.</li>
+        <li>Konektor Telegram kanal publik dan mode near-real-time (per 5 menit) dengan notifikasi.</li>
+        <li>Embedding semantik Bahasa Indonesia (IndoBERT) untuk parafrase berat.</li>
+        <li>Deteksi gambar/meme duplikat (perceptual hash).</li>
+        <li>RBAC dan audit log untuk banyak analis.</li>
+      </ol>
+    </div>
+  </div>
+  <figure style="margin-top:14px"><img src="../assets/screenshots/3-kasus-jaringan.png" style="height:60mm;object-fit:cover;object-position:0 75%"><div class="caption">Gambar 3. Jaringan koordinasi dalam satu kasus. Garis berarti dua akun ber-co-action di sedikitnya dua kesempatan berbeda; titik amber adalah akun penggerak (hub).</div></figure>
+</section>
+
+<section>
+  <h2><span class="n">08</span>Teknologi dan atribusi</h2>
+  <table>
+    <tr><th style="width:28%">Komponen</th><th>Teknologi</th></tr>
+    <tr><td>Bahasa dan penyimpanan</td><td>Python 3, SQLite</td></tr>
+    <tr><td>Analisis teks dan graf</td><td>scikit-learn (TF-IDF), networkx (Louvain, k-core), pandas, numpy</td></tr>
+    <tr><td>Antarmuka</td><td>Streamlit, Plotly; desain mengikuti metode unslop (Damir Sokolovsky, CC BY 4.0)</td></tr>
+    <tr><td>Data live (opsional)</td><td>ScrapeCreators API (TikTok, YouTube, X, Threads, Instagram), Mastodon API publik</td></tr>
+    <tr><td>Dataset uji eksternal</td><td>Cresci-2017 (Cresci dkk., WWW 2017), hanya untuk evaluasi. Seluruh library open-source; kode deteksi dan dashboard dikembangkan tim selama program.</td></tr>
+  </table>
+  
+</section>
+</div>
+
+</body>
+</html>
