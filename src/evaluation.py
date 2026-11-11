@@ -89,6 +89,27 @@ def evaluate_once(seed=42, difficulty=0.0):
     }
 
 
+def evaluate_buzzer(seeds=(1, 7, 42, 99, 2026), threshold=25):
+    """Lensa per akun TANPA sinyal jaringan (independen dari detection engine)."""
+    from buzzer import analyze_account
+    tp = fp = fn = 0
+    for s in seeds:
+        posts, accounts = generate_synthetic_dataset(seed=s)
+        by = defaultdict(list)
+        for p in posts:
+            by[p["account_id"]].append(p)
+        for a in accounts:
+            m = a["metadata"]
+            score = analyze_account({"username": a["account_id"], **m}, by[a["account_id"]], None)["score"]
+            truth, pred = m["label"].startswith("OP-"), score >= threshold
+            tp += truth and pred
+            fp += pred and not truth
+            fn += truth and not pred
+    p = tp / max(tp + fp, 1)
+    r = tp / max(tp + fn, 1)
+    return {"precision": p, "recall": r, "f1": 2 * p * r / max(p + r, 1e-9)}
+
+
 def run_benchmark(seeds=(1, 7, 42, 99, 2026), difficulties=(0.0, 0.5, 1.0)):
     rows = []
     for d in difficulties:
@@ -115,6 +136,9 @@ if __name__ == "__main__":
     print("-" * 75)
     for r in rows:
         print(f"{r['difficulty']:>9.1f} | {r['method']:32} | {r['precision']:>9.2%} | {r['recall']:>7.2%} | {r['f1']:>6.2%}")
+    bz = evaluate_buzzer(seeds=seeds)
+    print(f"\nBuzzer detector per akun (tanpa sinyal jaringan): precision {bz['precision']:.1%}, "
+          f"recall {bz['recall']:.1%}, F1 {bz['f1']:.1%}")
     out = Path(__file__).resolve().parent.parent / "docs" / "benchmark.md"
     with open(out, "w") as f:
         f.write("# Hasil Benchmark Deteksi (akun-level)\n\n")
@@ -122,4 +146,6 @@ if __name__ == "__main__":
         f.write("| Kesulitan | Metode | Precision | Recall | F1 |\n|---|---|---|---|---|\n")
         for r in rows:
             f.write(f"| {r['difficulty']:.1f} | {r['method']} | {r['precision']:.1%} | {r['recall']:.1%} | {r['f1']:.1%} |\n")
+        f.write(f"\n## Buzzer detector per akun\n\nTanpa sinyal jaringan, ambang skor 25: precision "
+                f"{bz['precision']:.1%}, recall {bz['recall']:.1%}, F1 {bz['f1']:.1%}.\n")
     print(f"\nTabel disimpan ke {out}")

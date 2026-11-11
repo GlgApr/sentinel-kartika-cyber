@@ -13,3 +13,7 @@ Dibuat otomatis oleh `python src/evaluation.py` — 5 seed per tingkat kesulitan
 | 1.0 | SENTINEL | 100.0% | 52.1% | 68.0% |
 | 1.0 | Baseline A (burst monitor) | 12.3% | 24.2% | 16.3% |
 | 1.0 | Baseline B (duplicate filter) | 21.0% | 90.5% | 34.1% |
+
+## Buzzer detector per akun
+
+Tanpa sinyal jaringan, ambang skor 25: precision 99.4%, recall 88.4%, F1 93.6%.

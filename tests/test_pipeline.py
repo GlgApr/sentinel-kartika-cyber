@@ -86,3 +86,18 @@ def test_load_generic_csv_columns():
 
 def test_scoring_weights_sum_to_one():
     assert abs(sum(Config.SCORING_WEIGHTS.values()) - 1.0) < 1e-9
+
+
+def test_buzzer_lens_separates_operations_without_network():
+    from evaluation import evaluate_buzzer
+    r = evaluate_buzzer(seeds=(42,))
+    assert r["precision"] >= 0.95 and r["recall"] >= 0.8
+
+
+def test_buzzer_flags_scheduled_copypasta_bot():
+    from buzzer import analyze_account
+    posts = [{"timestamp": f"2026-11-0{1 + i // 24}T{i % 24:02d}:00:00", "content": "BBM naik besok #BBMNaikBesok #a #b #c"}
+             for i in range(30)]
+    r = analyze_account({"username": "netizen_88231", "created_at": "2026-10-25", "followers": 3, "following": 900,
+                         "bio": ""}, posts, [])
+    assert r["score"] >= 50 and r["verdict"] in ("Bot atau akun otomatis", "Akun spam atau promosi")

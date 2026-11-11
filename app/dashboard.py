@@ -374,6 +374,124 @@ def network_figure(edges, roles):
     return fig
 
 
+
+# ============================================================== page: Profil akun (buzzer detector)
+def page_account():
+    from buzzer import analyze_account, from_database, from_tiktok, rank_accounts
+    from connectors import ScrapeCreators, get_scrapecreators_key, mask_identity
+
+    st.title("Profil akun")
+    st.markdown("<div class='sub'>Buzzer detector per akun. Menilai identitas, ritme posting, pola konten, "
+                "kewajaran interaksi dan keterlibatan jaringan, lalu menjelaskan setiap alasannya</div>",
+                unsafe_allow_html=True)
+    key = get_scrapecreators_key()
+    modes = ["Akun di data aktif"] + (["Cek akun TikTok"] if key else [])
+    mode = st.segmented_control("Mode", modes, default=modes[0], label_visibility="collapsed")
+    st.write("")
+    result = None
+
+    if mode == "Akun di data aktif":
+        ranked = rank_accounts(db)
+        if not ranked:
+            st.info("Belum ada data. Muat data dari Sumber data")
+            return
+        top = pd.DataFrame(ranked[:15])
+        top.insert(0, "", top["account_id"].map(avatar))
+        top["Akun"] = top["account_id"].str.split(":").str[-1]
+        st.markdown("### Akun paling mencurigakan")
+        ev = st.dataframe(top[["", "Akun", "score", "verdict", "posts"]], hide_index=True, width="stretch",
+                          on_select="rerun", selection_mode="single-row", key="acc_rank", height=300,
+                          column_config={"": st.column_config.ImageColumn("", width="small"),
+                                         "score": st.column_config.ProgressColumn("Skor buzzer", min_value=0,
+                                                                                  max_value=100, format="%d"),
+                                         "verdict": "Penilaian", "posts": "Post"})
+        ids = [r["account_id"] for r in ranked]
+        pick = top.iloc[ev.selection.rows[0]]["account_id"] if ev.selection.rows else st.session_state.get("acc_id", ids[0])
+        aid = st.selectbox("Atau cari akun", ids, index=ids.index(pick) if pick in ids else 0,
+                           format_func=lambda i: i.split(":")[-1])
+        st.session_state["acc_id"] = aid
+        profile, aposts, mem = from_database(db, aid)
+        result = (profile, aposts, analyze_account(profile, aposts, mem), aid)
+    else:
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 1])
+            handle = c1.text_input("Username TikTok", placeholder="tanpa @")
+            mask = c2.toggle("Mode presentasi", value=True, help="Samarkan username pada tampilan")
+            c2.markdown("<div class='meta'>2 kredit per akun</div>", unsafe_allow_html=True)
+            go_ = st.button("Analisis akun", type="primary", disabled=not handle)
+        if go_ and handle:
+            try:
+                with st.spinner("Menarik profil dan video terbaru"):
+                    profile, aposts = from_tiktok(ScrapeCreators(key), handle)
+                st.session_state["acc_live"] = (profile, aposts, mask)
+            except Exception as e:
+                st.error(f"Gagal menganalisis akun: {e}")
+        if "acc_live" in st.session_state:
+            profile, aposts, mask = st.session_state["acc_live"]
+            name = "tiktok:" + profile["username"]
+            mem = [dict(r) for r in db.conn.execute(
+                """SELECT c.campaign_id, c.description, c.flag_score, ca.role FROM campaign_accounts ca
+                   JOIN campaigns c USING(campaign_id) WHERE ca.account_id=? AND c.status!='dismissed'""", (name,))]
+            shown = "tiktok:" + mask_identity(name) if mask else name
+            result = (profile, aposts, analyze_account(profile, aposts, mem), shown)
+    if result:
+        account_dossier(*result)
+
+
+def account_dossier(profile, aposts, r, shown_id):
+    band = r["risk"]
+    color = RISK_COLOR[band]
+    name = shown_id.split(":")[-1]
+    created = parse_ts(profile.get("created_at")) if profile.get("created_at") else None
+    facts = [f"{profile.get('followers'):,} follower" if profile.get("followers") is not None else None,
+             f"mengikuti {profile.get('following'):,}" if profile.get("following") is not None else None,
+             f"dibuat {created:%d %b %Y}" if created else None, f"{r['post_count']} post dianalisis"]
+    st.divider()
+    left, right = st.columns([1, 2], gap="large")
+    with left:
+        st.markdown(f"<div class='panel'><img src=\"{avatar(shown_id)}\" width='48' style='border-radius:24px'>"
+                    f"<div style='font-size:18px;margin-top:12px'>{name}</div>"
+                    f"<div class='meta' style='margin:4px 0 20px'>{' · '.join(f for f in facts if f)}</div>"
+                    f"<div class='meta'>Skor buzzer</div>"
+                    f"<div class='score' style='color:{color};margin:8px 0'>{r['score']}</div>"
+                    f"<div style='font-size:15px;color:{TEXT}'>{r['verdict']}</div>"
+                    f"<div class='meta' style='margin-top:12px'>{r['coverage']}</div></div>",
+                    unsafe_allow_html=True)
+    with right:
+        st.markdown("### Sinyal")
+        sig = r["signals"]
+        avail = {k: v for k, v in sig.items() if v["score"] is not None}
+        lead = max(avail, key=lambda k: avail[k]["score"] * avail[k]["weight"]) if avail else None
+        html = ""
+        for k, v in sig.items():
+            val = v["score"]
+            pct = "–" if val is None else f"{val:.0%}"
+            width = 0 if val is None else val * 100
+            html += (f"<div class='sig'><div class='sig-row'><span>{v['label']}</span>"
+                     f"<span class='mono'>{pct} <span style='color:{MUTED}'>× {v['weight']:.0%}</span></span></div>"
+                     f"<div class='bar'><i style='width:{width:.0f}%;background:{ACCENT if k == lead else NEUTRAL_1}'></i></div>"
+                     f"<div class='meta' style='margin-top:4px'>{'; '.join(v['reasons'])}</div></div>")
+        st.markdown(html, unsafe_allow_html=True)
+
+    st.markdown("### Jam aktivitas")
+    fig = go.Figure(go.Heatmap(z=r["heatmap"], x=[f"{h:02d}" for h in range(24)], y=["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"],
+                               colorscale=[[0, CARD], [0.01, RAISED], [1, ACCENT]], showscale=False, xgap=2, ygap=2,
+                               hovertemplate="%{y} %{x}:00 · %{z} post<extra></extra>"))
+    plot_layout(fig, 220)
+    fig.update_yaxes(autorange="reversed", gridcolor="rgba(0,0,0,0)")
+    fig.update_xaxes(gridcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    st.caption("Akun manusia punya jam tidur. Kotak terisi merata di semua jam, termasuk dini hari, adalah ciri otomasi")
+
+    st.markdown("### Post terbaru")
+    pdf = pd.DataFrame([{"Waktu": fmt_ts(p["timestamp"]), "Konten": p["content"], "Tayangan": p.get("views"),
+                         "Suka": p.get("likes")} for p in sorted(aposts, key=lambda p: p["timestamp"], reverse=True)])
+    if not pdf.empty:
+        pdf = pdf.dropna(axis=1, how="all")
+        st.dataframe(pdf, hide_index=True, width="stretch", height=280,
+                     column_config={"Konten": st.column_config.TextColumn("Konten", width="large")})
+    st.caption("Skor berbasis aturan perilaku yang transparan, bukan model yang dilatih. Keputusan tetap pada analis")
+
 # ============================================================== page: Sumber data
 def page_sources():
     st.title("Sumber data")
@@ -570,6 +688,7 @@ def page_method():
 PAGES = {
     "ancaman": st.Page(page_threats, title="Ancaman", icon=":material/radar:", default=True, url_path="ancaman"),
     "kasus": st.Page(page_case, title="Kasus", icon=":material/folder_open:", url_path="kasus"),
+    "akun": st.Page(page_account, title="Profil akun", icon=":material/person_search:", url_path="akun"),
     "sumber": st.Page(page_sources, title="Sumber data", icon=":material/database:", url_path="sumber"),
     "metode": st.Page(page_method, title="Metodologi", icon=":material/science:", url_path="metodologi"),
 }

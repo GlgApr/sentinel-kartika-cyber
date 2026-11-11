@@ -21,6 +21,21 @@ SENTINEL mendeteksi **perilaku terkoordinasi** (*Coordinated Inauthentic Behavio
 | Output | Grafik | **Campaign + skor + alasan + bukti + laporan intelijen** |
 | F1-score (benchmark) | 22–36 % | **100 % (normal), 95 % (operator rapi)** |
 
+## 💡 Kebaruan
+
+1. **Tidak butuh data latih, justru itu kekuatannya.** Model ber-label (seperti Botometer) hanya mengenali
+   pola yang pernah dilihat dan membawa bias pelabelnya. SENTINEL menilai *perilaku* (serentak, berulang,
+   seragam), sehingga langsung bekerja pada narasi baru hari ini, dan netral terhadap isi opini.
+2. **Kriteria "koordinasi berulang".** Dua akun baru dianggap terhubung bila ber-co-action di ≥2 episode
+   terpisah. Ini yang membedakan viral rekayasa dari viral organik (uji: berita gempa tidak ter-flag).
+3. **Dua lensa yang saling menguatkan**: jaringan (Louvain atas graf co-action) dan **buzzer detector per
+   akun** (identitas, ritme, konten, interaksi, jejaring), keduanya menjelaskan setiap alasannya.
+4. **Dibuat untuk medsos Indonesia**: normalisasi slang (`yg`, `gak`, `udh`) + char n-gram tahan typo.
+5. **Akurasi terukur, bukan klaim**: generator skenario berlabel sebagai *evaluation harness* — F1 jaringan
+   100% vs baseline 22–36%; buzzer detector per akun F1 93,6% tanpa sinyal jaringan.
+6. **Siap operasi**: data live TikTok/YouTube/X/Threads/Instagram, Indeks Potensi Viral, hash SHA-256 bukti
+   (*chain of custody*), laporan intelijen, keputusan analis tercatat.
+
 ## ⚡ Menjalankan (± 1 menit)
 
 ```bash
@@ -85,9 +100,9 @@ keterbatasan yang kami ungkap secara jujur dan menjadi bahan pengembangan (jende
 
 ```
 src/   config.py · database.py · data_ingestion.py · feature_extraction.py
-       detection_engine.py · evaluation.py · report.py · connectors.py
+       detection_engine.py · buzzer.py · evaluation.py · report.py · connectors.py
 app/   dashboard.py (Streamlit) · dashboard_cli.py
-tests/ test_pipeline.py · test_connectors.py (12 tes)
+tests/ test_pipeline.py · test_connectors.py (14 tes)
 data/  raw/sample_social_posts.csv · processed/detection.db
 docs/  arsitektur-sistem.md · benchmark.md
 ```
