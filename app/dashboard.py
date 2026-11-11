@@ -77,7 +77,11 @@ def campaign_label(c):
 st.sidebar.markdown(f"## 🛡️ {Config.APP_NAME}")
 st.sidebar.caption(Config.APP_TAGLINE)
 page = st.sidebar.radio("Navigasi", ["🏠 Ringkasan Situasi", "🔍 Investigasi Campaign", "🕸️ Peta Jaringan",
-                                     "📥 Data & Deteksi", "📈 Evaluasi Akurasi", "ℹ️ Metodologi"])
+                                     "🌐 Data Lapangan (Live)", "📥 Data & Deteksi", "📈 Evaluasi Akurasi",
+                                     "ℹ️ Metodologi"])
+if not posts_df.empty:
+    src = posts_df["platform"].value_counts()
+    st.sidebar.caption("Sumber data aktif: " + ", ".join(f"{k} ({v})" for k, v in src.items()))
 st.sidebar.divider()
 run = db.get_last_run()
 if run:
@@ -369,6 +373,88 @@ elif page == "📈 Evaluasi Akurasi":
                      hide_index=True, width="stretch")
     elif bench.exists():
         st.markdown(bench.read_text())
+
+elif page == "🌐 Data Lapangan (Live)":
+    from connectors import ScrapeCreators, get_scrapecreators_key, mastodon_hashtag, to_sentinel, viral_index
+
+    st.title("🌐 Data Lapangan — Tarik Data Publik Nyata")
+    st.caption("Tarik post publik terbaru dari media sosial berdasarkan kata kunci/tagar, ukur **Indeks Potensi "
+               "Viral**, lalu jalankan deteksi koordinasi pada data nyata tersebut.")
+    key = get_scrapecreators_key()
+    sources = ["ScrapeCreators (TikTok, X, Threads, YouTube, Instagram)"] if key else []
+    sources.append("Mastodon (gratis, tanpa API key)")
+    c1, c2 = st.columns([2, 1])
+    source = c1.radio("Sumber data", sources, horizontal=True)
+    if not key:
+        c1.caption("🔑 ScrapeCreators belum aktif — tambahkan `SCRAPECREATORS_API_KEY` di Streamlit Secrets "
+                   "untuk TikTok/X/Threads/YouTube/Instagram.")
+    mask = c2.toggle("🕶️ Mode Presentasi (samarkan identitas)", value=True,
+                     help="Username diganti kode anonim & avatar/URL tidak disimpan. Wajib aktif saat rekam video/screenshot.")
+
+    if source.startswith("ScrapeCreators"):
+        sc = ScrapeCreators(key)
+        query = st.text_input("Kata kunci / tagar", "jalur khusus bintara")
+        plats = st.multiselect("Platform", list(ScrapeCreators.PLATFORMS), default=["tiktok", "twitter", "youtube"],
+                               format_func=ScrapeCreators.PLATFORMS.get)
+        pages = st.slider("Halaman per platform (1 halaman = 1 kredit)", 1, 5, 1)
+        st.caption(f"Perkiraan biaya: {len(plats) * pages} kredit.")
+    else:
+        query = st.text_input("Tagar Mastodon (tanpa #)", "indonesia")
+        instance = st.text_input("Instance", "mastodon.social")
+        pages = st.slider("Halaman (40 post/halaman)", 1, 10, 3)
+
+    if st.button("📡 Tarik data", type="primary"):
+        raw, errors = [], []
+        with st.spinner("Menarik data publik..."):
+            if source.startswith("ScrapeCreators"):
+                for pf in plats:
+                    try:
+                        raw += sc.search(pf, query, pages=pages)
+                    except Exception as e:
+                        errors.append(f"{ScrapeCreators.PLATFORMS[pf]}: {e}")
+            else:
+                try:
+                    raw = mastodon_hashtag(query, instance=instance, pages=pages)
+                except Exception as e:
+                    errors.append(str(e))
+        st.session_state["live_raw"], st.session_state["live_query"] = raw, query
+        for e in errors:
+            st.warning(e)
+        if source.startswith("ScrapeCreators") and sc.credits_remaining is not None:
+            st.info(f"Sisa kredit ScrapeCreators: {sc.credits_remaining}")
+
+    raw = st.session_state.get("live_raw")
+    if raw is not None:
+        if not raw:
+            st.warning("Tidak ada post ditemukan untuk kata kunci ini.")
+            st.stop()
+        vi = viral_index(raw)
+        st.subheader(f"Hasil: “{st.session_state['live_query']}”")
+        m = st.columns(5)
+        m[0].metric("Indeks Potensi Viral", f"{vi['score']}/100")
+        m[1].metric("Status", vi["label"])
+        m[2].metric("Perkiraan jangkauan", f"{vi['reach']:,}")
+        m[3].metric("Platform", vi["platforms"])
+        m[4].metric("Akun besar (≥100rb)", vi["big_accounts"])
+        st.caption("Indeks = kecepatan tayangan/jam (40%) + jangkauan total (25%) + sebaran lintas platform (15%) "
+                   "+ keterlibatan akun besar (20%). Bila platform tidak memberi jumlah tayangan, diestimasi dari interaksi.")
+        posts, accounts = to_sentinel(raw, mask=mask)
+        ldf = pd.DataFrame([{**{k: p[k] for k in ("timestamp", "platform", "account_id", "content")},
+                             **{k: p["metadata"].get(k) for k in ("views", "likes", "shares", "comments")}}
+                            for p in posts]).sort_values("timestamp")
+        ldf["ts"] = pd.to_datetime(ldf["timestamp"])
+        fig = px.histogram(ldf, x="ts", color="platform", nbins=40, height=260)
+        fig.update_layout(margin=dict(t=10, b=10), xaxis_title=None, yaxis_title="post",
+                          legend=dict(orientation="h", y=-0.3))
+        st.plotly_chart(fig, width="stretch")
+        st.dataframe(ldf.drop(columns="ts"), hide_index=True, width="stretch", height=300)
+        st.caption(f"{len(posts)} post dari {len(accounts)} akun. Data hanya berasal dari konten publik.")
+        if st.button("🔎 Analisis koordinasi pada data ini (menggantikan data di database)"):
+            ingest(posts, accounts, db)
+            camps = DetectionEngine(db).run_detection_pipeline(verbose=False)
+            st.session_state.pop("live_raw")
+            st.success(f"Selesai: {sum(c['status'] == 'flagged' for c in camps)} campaign di-flag dari "
+                       f"{len(camps)} cluster. Buka 🏠 Ringkasan / 🔍 Investigasi untuk melihat hasil.")
 
 else:
     st.title("ℹ️ Metodologi")

@@ -7,3 +7,4 @@ data/processed/*.db
 venv/
 docs/AUDIT-DAN-STRATEGI.md
 docs/DETAIL-PROGRAM.md
+.streamlit/secrets.toml

@@ -39,6 +39,14 @@ streamlit run app/dashboard.py      # buka http://localhost:8501
 Tanpa browser: `python app/dashboard_cli.py` · Laporan: `python app/dashboard_cli.py --report CMP-XXXXXX`
 Benchmark akurasi: `python src/evaluation.py` · Tes: `python -m pytest -q`
 
+### 🌐 Data asli (live)
+Halaman **🌐 Data Lapangan** menarik post publik terbaru berdasarkan kata kunci/tagar, menghitung
+**Indeks Potensi Viral**, lalu menjalankan deteksi koordinasi pada data nyata.
+- **Mastodon**: gratis, tanpa API key.
+- **TikTok, X, Threads, YouTube, Instagram** via [ScrapeCreators](https://scrapecreators.com): isi
+  `SCRAPECREATORS_API_KEY` di `.streamlit/secrets.toml` (lokal) atau di *Settings → Secrets* (Streamlit Cloud).
+- **Mode Presentasi** (aktif secara default) menyamarkan username dan tidak menyimpan avatar/URL.
+
 Data nyata (CSV/JSON/JSONL dengan kolom `text`, `username`, `created_at`, opsional
 `user_created_at`, `followers_count`) bisa diunggah dari halaman **📥 Data & Deteksi** atau:
 `python src/data_ingestion.py --file data/raw/dataset.csv`
@@ -77,9 +85,9 @@ keterbatasan yang kami ungkap secara jujur dan menjadi bahan pengembangan (jende
 
 ```
 src/   config.py · database.py · data_ingestion.py · feature_extraction.py
-       detection_engine.py · evaluation.py · report.py
+       detection_engine.py · evaluation.py · report.py · connectors.py
 app/   dashboard.py (Streamlit) · dashboard_cli.py
-tests/ test_pipeline.py (8 tes)
+tests/ test_pipeline.py · test_connectors.py (12 tes)
 data/  raw/sample_social_posts.csv · processed/detection.db
 docs/  arsitektur-sistem.md · benchmark.md
 ```
