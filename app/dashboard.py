@@ -82,6 +82,10 @@ page = st.sidebar.radio("Navigasi", ["🏠 Ringkasan Situasi", "🔍 Investigasi
 if not posts_df.empty:
     src = posts_df["platform"].value_counts()
     st.sidebar.caption("Sumber data aktif: " + ", ".join(f"{k} ({v})" for k, v in src.items()))
+    if "sample" not in src.index and st.sidebar.button("↩️ Kembali ke data skenario demo", width="stretch"):
+        ingest(*generate_synthetic_dataset(seed=42), db)
+        DetectionEngine(db).run_detection_pipeline(verbose=False)
+        st.rerun()
 st.sidebar.divider()
 run = db.get_last_run()
 if run:
