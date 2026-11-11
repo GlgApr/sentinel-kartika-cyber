@@ -40,7 +40,7 @@ Tanpa browser: `python app/dashboard_cli.py` · Laporan: `python app/dashboard_c
 Benchmark akurasi: `python src/evaluation.py` · Tes: `python -m pytest -q`
 
 ### 🌐 Data asli (live)
-Halaman **🌐 Data Lapangan** menarik post publik terbaru berdasarkan kata kunci/tagar, menghitung
+Halaman **Sumber data → Data live** menarik post publik terbaru berdasarkan kata kunci/tagar, menghitung
 **Indeks Potensi Viral**, lalu menjalankan deteksi koordinasi pada data nyata.
 - **Mastodon**: gratis, tanpa API key.
 - **TikTok, X, Threads, YouTube, Instagram** via [ScrapeCreators](https://scrapecreators.com): isi
@@ -48,7 +48,7 @@ Halaman **🌐 Data Lapangan** menarik post publik terbaru berdasarkan kata kunc
 - **Mode Presentasi** (aktif secara default) menyamarkan username dan tidak menyimpan avatar/URL.
 
 Data nyata (CSV/JSON/JSONL dengan kolom `text`, `username`, `created_at`, opsional
-`user_created_at`, `followers_count`) bisa diunggah dari halaman **📥 Data & Deteksi** atau:
+`user_created_at`, `followers_count`) bisa diunggah dari halaman **Sumber data → Unggah file** atau:
 `python src/data_ingestion.py --file data/raw/dataset.csv`
 
 ## 🧠 Cara kerja
@@ -64,7 +64,7 @@ Post medsos ─► Normalisasi slang ─► TF-IDF char n-gram ─► Co-action 
           ▼
  Skor 5 sinyal (konten 30% · timing 25% · profil akun 20% · jaringan 15% · amplifikasi 10%)
           ▼
- Dashboard: ringkasan · investigasi (radar, barcode sinkronisasi, graf, bukti) · triage · laporan
+ Dashboard: Ancaman (antrean terurut) → Kasus (barcode sinkronisasi, bukti + hash SHA-256, jaringan, akun) → tindakan & laporan
 ```
 
 Detail: [docs/arsitektur-sistem.md](docs/arsitektur-sistem.md) · Hasil uji: [docs/benchmark.md](docs/benchmark.md)
@@ -97,3 +97,4 @@ docs/  arsitektur-sistem.md · benchmark.md
 - Demo memakai **data sintetis**: seluruh akun, nomor, URL fiktif (tidak ada data pribadi pihak ketiga — sesuai rulebook & UU PDP).
 - Human-in-the-loop: skor adalah rekomendasi, keputusan tetap di tangan analis.
 - Library pihak ketiga open-source: pandas, numpy, scikit-learn, networkx, streamlit, plotly.
+- Desain antarmuka mengikuti metode [unslop](https://github.com/heydamir/unslop) oleh Damir Sokolovsky (CC BY 4.0).

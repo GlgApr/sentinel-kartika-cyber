@@ -1,6 +1,11 @@
 [theme]
-primaryColor = "#d62728"
-base = "light"
+base = "dark"
+primaryColor = "#e0a040"
+backgroundColor = "#141415"
+secondaryBackgroundColor = "#19191b"
+textColor = "#ededed"
+borderColor = "#2a2a2d"
+baseRadius = "10px"
 
 [server]
 headless = true

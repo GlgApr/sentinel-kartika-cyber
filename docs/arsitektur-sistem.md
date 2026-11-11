@@ -48,14 +48,13 @@ Precision/recall/F1 level akun terhadap ground truth, 5 seed × 3 tingkat kesuli
 dengan baseline *burst monitor* dan *duplicate filter*. Hasil: `docs/benchmark.md`.
 
 ## 6. Dashboard (`app/dashboard.py`)
-1. **Ringkasan Situasi** — KPI, timeline organik vs terkoordinasi + penanda lonjakan, kartu campaign prioritas.
-2. **Investigasi Campaign** — radar 5 sinyal, tabel kontribusi skor, temuan berbahasa Indonesia,
-   *barcode* sinkronisasi akun×waktu, graf hub/amplifier, konten bukti (cari & unduh CSV),
-   profil akun (histogram tanggal pembuatan), triage + catatan analis, **Laporan Intelijen** (Markdown).
-3. **Peta Jaringan** — seluruh jaringan koordinasi berwarna per campaign.
-4. **Data & Deteksi** — muat skenario (seed/kesulitan), unggah dataset sendiri, tuning parameter.
-5. **Evaluasi Akurasi** — benchmark interaktif.
-6. **Metodologi**.
+Alur analis mengikuti pola tools CIB profesional: antrean ancaman → berkas kasus → tindakan.
+1. **Ancaman** — status ancaman, 4 angka kunci, timeline organik vs terkoordinasi, antrean kasus terurut skor (klik untuk membuka kasus).
+2. **Kasus** — skor dan kontribusi 5 sinyal, *barcode* sinkronisasi akun × waktu, temuan, tab Bukti (cari, unduh CSV + hash SHA-256), Jaringan (penggerak/penguat), Akun (avatar inisial buatan, umur akun, indikator anomali), Tindakan dan laporan.
+3. **Sumber data** — Data live (ScrapeCreators: TikTok, YouTube, X, Threads, Instagram; Mastodon gratis) dengan Indeks Potensi Viral dan akun tunggal mencurigakan, skenario demo, unggah file, parameter deteksi.
+4. **Metodologi** — pipeline dan benchmark akurasi.
+
+Tema gelap "ruang komando": netral grafit, satu aksen amber untuk hal terpenting, merah hanya untuk risiko tinggi, IBM Plex Sans + Mono, ikon garis Material. Metode desain: unslop (Damir Sokolovsky, CC BY 4.0).
 
 ## 7. Pengembangan lanjutan (realistis)
 - Konektor data: X/Twitter API, YouTube comment, TikTok, Telegram channel publik.

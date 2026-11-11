@@ -3,13 +3,18 @@
 # Kartika Cyber Hackathon 2026 · Kategori: Siber Sosial
 #
 # Jalankan:  streamlit run app/dashboard.py
+#
+# Alur analis: Sumber data -> Ancaman (antrean terurut) -> Kasus (bukti, jaringan,
+# akun) -> Tindakan & laporan. Desain mengikuti metode unslop
+# (github.com/heydamir/unslop, CC BY 4.0 — Damir Sokolovsky).
 
+import hashlib
 import sys
+import urllib.parse
 from pathlib import Path
 
 import networkx as nx
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -19,478 +24,563 @@ from config import Config  # noqa: E402
 from data_ingestion import generate_synthetic_dataset, ingest, load_dataframe  # noqa: E402
 from database import Database  # noqa: E402
 from detection_engine import SIGNAL_LABELS, DetectionEngine  # noqa: E402
-from feature_extraction import FeatureExtractor  # noqa: E402
+from feature_extraction import FeatureExtractor, parse_ts  # noqa: E402
 from report import campaign_brief  # noqa: E402
 
-st.set_page_config(page_title="SENTINEL · Deteksi Operasi Pengaruh", page_icon="🛡️",
-                   layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="SENTINEL", page_icon=":material/radar:", layout="wide",
+                   initial_sidebar_state="expanded")
 
-RISK_COLOR = {"TINGGI": "#d62728", "SEDANG": "#ff9f1c", "RENDAH": "#7f8c8d"}
-STATUS_ICON = {"flagged": "🔴", "escalated": "🚨", "reviewed": "🟡", "dismissed": "⚪"}
-PALETTE = px.colors.qualitative.Bold
+# ============================================================== design tokens
+BG, CARD, RAISED = "#141415", "#19191b", "#232325"
+TEXT, TEXT_2, MUTED = "#ededed", "#a1a1a6", "#85858b"
+HAIR = "rgba(237,237,237,0.08)"
+ACCENT = "#e0a040"          # amber sinyal — hanya untuk hal terpenting
+HIGH = "#e5484d"            # risiko tinggi
+NEUTRAL_1, NEUTRAL_2 = "#5c5c63", "#38383d"
+RISK_COLOR = {"TINGGI": HIGH, "SEDANG": ACCENT, "RENDAH": MUTED}
+RISK_LABEL = {"TINGGI": "Risiko tinggi", "SEDANG": "Risiko sedang", "RENDAH": "Risiko rendah"}
+STATUS_LABEL = {"flagged": "Perlu review", "reviewed": "Sudah direview", "escalated": "Dieskalasi",
+                "dismissed": "Bukan ancaman"}
 
-st.markdown("""
+st.markdown(f"""
 <style>
-.block-container {padding-top: 1.6rem;}
-.risk-badge {display:inline-block;padding:2px 10px;border-radius:12px;color:#fff;font-weight:600;font-size:0.85rem}
-.expl li {margin-bottom: 0.25rem;}
-div[data-testid="stMetricValue"] {font-size: 1.7rem;}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+html, body, .stApp, p, li, label, input, textarea, button, h1, h2, h3, h4, td, th,
+[data-testid="stMarkdownContainer"], [data-testid="stMetricLabel"] {{
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+}}
+[data-testid="stIconMaterial"] {{ font-family: 'Material Symbols Rounded' !important; }}
+.block-container {{ padding-top: 2rem; padding-bottom: 4rem; max-width: 1480px; }}
+h1 {{ font-size: 28px !important; font-weight: 500 !important; letter-spacing: -0.01em; }}
+h2, h3 {{ font-weight: 500 !important; }}
+h3 {{ font-size: 16px !important; color: {TEXT}; }}
+.mono, code {{ font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }}
+.sub {{ color: {TEXT_2}; font-size: 14px; margin-top: -8px; margin-bottom: 24px; }}
+.meta {{ color: {MUTED}; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }}
+[data-testid="stMetricValue"] {{ font-family: 'IBM Plex Mono', monospace; font-size: 28px;
+  font-weight: 500; font-variant-numeric: tabular-nums; }}
+[data-testid="stMetricLabel"] p {{ color: {TEXT_2}; font-size: 13px; }}
+[data-testid="stMetric"] {{ background: {CARD}; border: 1px solid {HAIR}; border-radius: 12px; padding: 16px 20px; }}
+[data-testid="stSidebar"] {{ background: #0f0f10; border-right: 1px solid {HAIR}; }}
+button[kind="primary"] {{ background: {TEXT} !important; color: {BG} !important; border: none !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12); }}
+button[kind="primary"]:hover {{ background: #ffffff !important; }}
+.dot {{ display:inline-block; width:8px; height:8px; border-radius:4px; margin-right:8px; vertical-align:middle; }}
+.case-id {{ font-family:'IBM Plex Mono', monospace; font-size:13px; color:{TEXT_2};
+  border:1px solid {HAIR}; border-radius:6px; padding:2px 8px; }}
+.status-line {{ display:flex; gap:24px; align-items:center; background:{CARD}; border:1px solid {HAIR};
+  border-radius:12px; padding:12px 20px; margin-bottom:16px; font-size:14px; color:{TEXT_2}; }}
+.status-line b {{ color:{TEXT}; font-weight:500; }}
+.sig {{ margin-bottom:12px; }}
+.sig-row {{ display:flex; justify-content:space-between; font-size:13px; color:{TEXT_2}; margin-bottom:4px; }}
+.sig-row .mono {{ color:{TEXT}; }}
+.bar {{ height:4px; background:{RAISED}; border-radius:2px; overflow:hidden; }}
+.bar i {{ display:block; height:4px; border-radius:2px; }}
+.score {{ font-family:'IBM Plex Mono', monospace; font-size:44px; font-weight:500; line-height:1; }}
+.findings li {{ color:{TEXT_2}; font-size:14px; margin-bottom:8px; line-height:20px; }}
+.panel {{ background:{CARD}; border:1px solid {HAIR}; border-radius:14px; padding:20px 24px; }}
 </style>""", unsafe_allow_html=True)
 
 
+# ============================================================== data
 @st.cache_resource
 def get_db():
     db = Database()
-    if db.count("posts") == 0:  # first run: siapkan data demo otomatis
-        posts, accounts = generate_synthetic_dataset(seed=42)
-        ingest(posts, accounts, db)
+    if db.count("posts") == 0:  # first run: siapkan data skenario otomatis
+        ingest(*generate_synthetic_dataset(seed=42), db)
         DetectionEngine(db).run_detection_pipeline(verbose=False)
     return db
 
 
 db = get_db()
-
-
-def load_state():
-    posts = pd.DataFrame(db.get_all_posts())
-    camps = db.get_campaigns()
-    members = pd.DataFrame(db.get_all_campaign_accounts())
-    return posts, camps, members
-
-
-posts_df, campaigns, members_df = load_state()
+posts_df = pd.DataFrame(db.get_all_posts())
 if not posts_df.empty:
     posts_df["ts"] = pd.to_datetime(posts_df["timestamp"])
-flagged = [c for c in campaigns if c["status"] in ("flagged", "escalated", "reviewed")]
-camp_color = {c["campaign_id"]: PALETTE[i % len(PALETTE)] for i, c in enumerate(campaigns)}
+campaigns = db.get_campaigns()
+active = [c for c in campaigns if c["status"] != "dismissed"]
+members_df = pd.DataFrame(db.get_all_campaign_accounts())
 
 
-def risk_badge(level):
-    return f"<span class='risk-badge' style='background:{RISK_COLOR[level]}'>{level}</span>"
-
-
-def campaign_label(c):
-    return f"{STATUS_ICON.get(c['status'], '')} {c['campaign_id']} · {c['risk_level']} · {c['description']}"
-
-
-# ============================================================== sidebar
-st.sidebar.markdown(f"## 🛡️ {Config.APP_NAME}")
-st.sidebar.caption(Config.APP_TAGLINE)
-page = st.sidebar.radio("Navigasi", ["🏠 Ringkasan Situasi", "🔍 Investigasi Campaign", "🕸️ Peta Jaringan",
-                                     "🌐 Data Lapangan (Live)", "📥 Data & Deteksi", "📈 Evaluasi Akurasi",
-                                     "ℹ️ Metodologi"])
-if not posts_df.empty:
-    src = posts_df["platform"].value_counts()
-    st.sidebar.caption("Sumber data aktif: " + ", ".join(f"{k} ({v})" for k, v in src.items()))
-    if "sample" not in src.index and st.sidebar.button("↩️ Kembali ke data skenario demo", width="stretch"):
-        ingest(*generate_synthetic_dataset(seed=42), db)
-        DetectionEngine(db).run_detection_pipeline(verbose=False)
-        st.rerun()
-st.sidebar.divider()
-run = db.get_last_run()
-if run:
-    st.sidebar.caption(f"Run terakhir: {run['started_at'].replace('T', ' ')}  \n"
-                       f"{run['post_count']} post · {run['account_count']} akun · {run['duration_s']} dtk")
-if st.sidebar.button("🔄 Jalankan Ulang Deteksi", width="stretch"):
-    with st.spinner("Menjalankan pipeline deteksi..."):
-        DetectionEngine(db).run_detection_pipeline(verbose=False)
-    st.rerun()
-st.sidebar.caption("Kartika Cyber Hackathon 2026 · Kategori Siber Sosial")
-
-
-# ============================================================== helpers (charts)
-def timeline_chart(df, height=360):
-    """Aktivitas per jam: organik vs post terkoordinasi per campaign."""
-    shown = {c["campaign_id"] for c in flagged}
-    cp = pd.read_sql("SELECT campaign_id, post_id FROM campaign_posts", db.conn)
-    cp = cp[cp["campaign_id"].isin(shown)].drop_duplicates("post_id")
-    d = df.merge(cp, on="post_id", how="left")
-    d["kategori"] = d["campaign_id"].fillna("Organik / tidak terkoordinasi")
-    d["jam"] = d["ts"].dt.floor("h")
-    g = d.groupby(["jam", "kategori"]).size().reset_index(name="jumlah")
-    cmap = {**camp_color, "Organik / tidak terkoordinasi": "#c7ccd1"}
-    fig = px.bar(g, x="jam", y="jumlah", color="kategori", color_discrete_map=cmap, height=height)
-    starts, series = FeatureExtractor.hourly_activity(df.to_dict("records"))
-    for b in FeatureExtractor.detect_bursts(starts, series):
-        fig.add_vrect(x0=b["window_start"], x1=pd.Timestamp(b["window_start"]) + pd.Timedelta(hours=1),
-                      fillcolor="red", opacity=0.07, line_width=0)
-    fig.update_traces(width=3600 * 1000 * 0.9)  # lebar bar = 1 jam (sumbu datetime dalam ms)
-    fig.update_layout(bargap=0.05, legend=dict(orientation="h", y=-0.25), margin=dict(t=10, b=10),
-                      xaxis_title=None, yaxis_title="post / jam")
+# ============================================================== helpers
+def plot_layout(fig, height):
+    fig.update_layout(
+        height=height, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="IBM Plex Sans, sans-serif", color=TEXT_2, size=12),
+        margin=dict(t=8, b=8, l=8, r=8), hoverlabel=dict(bgcolor=RAISED, font_family="IBM Plex Mono"),
+        legend=dict(orientation="h", y=-0.18, x=0, font=dict(size=12)),
+        xaxis=dict(gridcolor=HAIR, zeroline=False, tickfont=dict(family="IBM Plex Mono", size=11, color=MUTED)),
+        yaxis=dict(gridcolor=HAIR, zeroline=False, tickfont=dict(family="IBM Plex Mono", size=11, color=MUTED)))
     return fig
 
 
-def network_figure(edges, node_meta, height=520):
+def avatar(account_id):
+    """Avatar inisial buatan (bukan foto asli) — aman untuk presentasi."""
+    name = account_id.split(":")[-1]
+    letters = "".join(ch for ch in name if ch.isalpha())[:2].upper() or "?"
+    tone = ["#2a2a2e", "#323238", "#3a3a40", "#26262a"][int(hashlib.sha1(name.encode()).hexdigest(), 16) % 4]
+    svg = (f"<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><circle cx='16' cy='16' r='16' "
+           f"fill='{tone}'/><text x='16' y='20.5' font-family='IBM Plex Sans,Arial' font-size='12' "
+           f"text-anchor='middle' fill='#ededed'>{letters}</text></svg>")
+    return "data:image/svg+xml;utf8," + urllib.parse.quote(svg)
+
+
+def dot(color):
+    return f"<span class='dot' style='background:{color}'></span>"
+
+
+def fmt_ts(s):
+    return s[:16].replace("T", " ") if s else "-"
+
+
+def threat_level():
+    high = sum(c["risk_level"] == "TINGGI" for c in active)
+    if high:
+        return "Siaga", HIGH
+    if active:
+        return "Waspada", ACCENT
+    return "Normal", "#4cc38a"
+
+
+def data_source_line():
+    if posts_df.empty:
+        return "Belum ada data"
+    src = posts_df["platform"].replace({"sample": "skenario demo"}).value_counts()
+    return ", ".join(f"{k} {v:,}" for k, v in src.items())
+
+
+def run_detection(config=Config):
+    return DetectionEngine(db, config=config).run_detection_pipeline(verbose=False)
+
+
+# ============================================================== page: Ancaman
+def page_threats():
+    st.title("Ancaman aktif")
+    if posts_df.empty:
+        st.info("Belum ada data. Buka Sumber data untuk memuat skenario demo atau menarik data live")
+        return
+    t0, t1 = posts_df["ts"].min(), posts_df["ts"].max()
+    st.markdown(f"<div class='sub'>Operasi pengaruh terkoordinasi yang terdeteksi pada "
+                f"{t0:%d %b %Y} – {t1:%d %b %Y}, diurutkan dari yang paling berisiko</div>",
+                unsafe_allow_html=True)
+
+    level, color = threat_level()
+    high = sum(c["risk_level"] == "TINGGI" for c in active)
+    mid = sum(c["risk_level"] == "SEDANG" for c in active)
+    st.markdown(f"<div class='status-line'><span>{dot(color)}<b>Status {level}</b></span>"
+                f"<span>{high} risiko tinggi · {mid} risiko sedang</span>"
+                f"<span class='meta'>sumber: {data_source_line()}</span></div>", unsafe_allow_html=True)
+
+    involved = set(members_df[members_df["campaign_id"].isin([c["campaign_id"] for c in active])]["account_id"]) \
+        if not members_df.empty else set()
+    n_acc = posts_df["account_id"].nunique()
+    coord_posts = sum(c["post_count"] for c in active)
+    k = st.columns(4)
+    k[0].metric("Post dianalisis", f"{len(posts_df):,}")
+    k[1].metric("Akun dianalisis", f"{n_acc:,}")
+    k[2].metric("Campaign aktif", len(active))
+    k[3].metric("Akun terlibat", f"{len(involved):,}  ·  {len(involved) / max(n_acc, 1):.0%}")
+
+    st.markdown("### Aktivitas per jam")
+    st.plotly_chart(timeline_chart(), width="stretch", config={"displayModeBar": False})
+    note = (" Lonjakan besar tanpa warna adalah percakapan organik, misalnya berita gempa, dan sengaja tidak "
+            "ditandai karena tidak ada koordinasi berulang.") if "sample" in set(posts_df["platform"]) else ""
+    st.caption(f"{coord_posts:,} dari {len(posts_df):,} post ({coord_posts / len(posts_df):.1%}) berasal dari "
+               f"jaringan terkoordinasi. Pita terang menandai lonjakan volume.{note}")
+
+    st.markdown("### Antrean kasus")
+    show_all = st.toggle("Tampilkan juga cluster di bawah ambang", value=False)
+    rows = campaigns if show_all else active
+    if not rows:
+        st.success("Tidak ada jaringan terkoordinasi pada data ini")
+        return
+    q = pd.DataFrame([{
+        "ID": c["campaign_id"], "Risiko": RISK_LABEL[c["risk_level"]], "Skor": c["flag_score"],
+        "Pola": c["description"], "Akun": c["account_count"], "Post": c["post_count"],
+        "Mulai": fmt_ts(c["first_seen"]), "Status": STATUS_LABEL.get(c["status"], c["status"])} for c in rows])
+    ev = st.dataframe(q, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
+                      key="queue", column_config={
+                          "Skor": st.column_config.ProgressColumn("Skor", min_value=0, max_value=1, format="%.2f"),
+                          "Pola": st.column_config.TextColumn("Pola", width="medium")})
+    st.caption("Pilih satu baris untuk membuka berkas kasus")
+    if ev.selection.rows:
+        st.session_state["case_id"] = q.iloc[ev.selection.rows[0]]["ID"]
+        st.switch_page(PAGES["kasus"])
+
+
+def timeline_chart():
+    shown = {c["campaign_id"]: c["risk_level"] for c in active}
+    cp = pd.read_sql("SELECT campaign_id, post_id FROM campaign_posts", db.conn)
+    cp = cp[cp["campaign_id"].isin(shown)].drop_duplicates("post_id")
+    d = posts_df.merge(cp, on="post_id", how="left")
+    d["kelas"] = d["campaign_id"].map(shown).map({"TINGGI": "Terkoordinasi · risiko tinggi",
+                                                  "SEDANG": "Terkoordinasi · risiko sedang"}).fillna("Organik")
+    d["jam"] = d["ts"].dt.floor("h")
+    g = d.groupby(["jam", "kelas"]).size().unstack(fill_value=0)
+    fig = go.Figure()
+    for name, color in [("Organik", NEUTRAL_2), ("Terkoordinasi · risiko sedang", ACCENT),
+                        ("Terkoordinasi · risiko tinggi", HIGH)]:
+        if name in g:
+            fig.add_bar(x=g.index, y=g[name], name=name, marker_color=color, marker_line_width=0,
+                        width=3600 * 1000 * 0.85, hovertemplate="%{x|%d %b %H:00}<br>%{y} post<extra>" + name + "</extra>")
+    starts, series = FeatureExtractor.hourly_activity(posts_df.to_dict("records"))
+    for b in FeatureExtractor.detect_bursts(starts, series):
+        fig.add_vrect(x0=b["window_start"], x1=pd.Timestamp(b["window_start"]) + pd.Timedelta(hours=1),
+                      fillcolor=TEXT, opacity=0.05, line_width=0)
+    fig.update_layout(barmode="stack", bargap=0)
+    return plot_layout(fig, 320)
+
+
+# ============================================================== page: Kasus
+def page_case():
+    st.title("Berkas kasus")
+    if not campaigns:
+        st.info("Belum ada kasus. Jalankan deteksi dari Sumber data")
+        return
+    ids = [c["campaign_id"] for c in campaigns]
+    default = st.session_state.get("case_id")
+    idx = ids.index(default) if default in ids else 0
+    by_id = {c["campaign_id"]: c for c in campaigns}
+    cid = st.selectbox("Kasus", ids, index=idx, label_visibility="collapsed",
+                       format_func=lambda i: f"{i}  ·  {RISK_LABEL[by_id[i]['risk_level']]}  ·  {by_id[i]['description']}")
+    st.session_state["case_id"] = cid
+    c = db.get_campaign_by_id(cid)
+    accs = db.get_campaign_accounts(cid)
+    cposts = pd.DataFrame(db.get_posts_by_campaign(cid))
+    cposts["ts"] = pd.to_datetime(cposts["timestamp"])
+    edges = db.get_campaign_edges(cid)
+    color = RISK_COLOR[c["risk_level"]]
+
+    st.markdown(f"<div style='margin:16px 0 4px'><span class='case-id'>{cid}</span></div>"
+                f"<h2 style='font-size:22px;margin:8px 0 4px'>{c['description']}</h2>"
+                f"<div class='meta'>{dot(color)}{RISK_LABEL[c['risk_level']]} · {c['account_count']} akun · "
+                f"{c['post_count']} post · {fmt_ts(c['first_seen'])} → {fmt_ts(c['last_seen'])} · "
+                f"status: {STATUS_LABEL.get(c['status'], c['status'])}</div>", unsafe_allow_html=True)
+    st.write("")
+
+    left, right = st.columns([2, 1], gap="large")
+    with left:
+        st.markdown("### Pola sinkronisasi")
+        fig = go.Figure(go.Scatter(
+            x=cposts["ts"], y=cposts["account_id"].str.split(":").str[-1], mode="markers",
+            marker=dict(symbol="line-ns-open", size=16, color=color, line=dict(width=2, color=color)),
+            customdata=cposts["content"].str.slice(0, 90),
+            hovertemplate="%{y}<br>%{x|%d %b %H:%M}<br>%{customdata}<extra></extra>"))
+        plot_layout(fig, 380)
+        fig.update_yaxes(showticklabels=len(accs) <= 24, gridcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.caption("Setiap garis adalah satu post. Garis yang berbaris vertikal berarti banyak akun memposting "
+                   "pada menit yang hampir sama, dan pola itu berulang di beberapa gelombang")
+    with right:
+        st.markdown("### Kenapa ditandai")
+        st.markdown(f"<div class='score' style='color:{color}'>{c['flag_score']:.2f}</div>"
+                    f"<div class='meta' style='margin:4px 0 20px'>skor koordinasi · ambang {Config.FLAG_THRESHOLD}</div>",
+                    unsafe_allow_html=True)
+        sig = c["signals"]
+        contrib = {k: v * Config.SCORING_WEIGHTS[k] for k, v in sig.items()}
+        lead = max(contrib, key=contrib.get)
+        html = ""
+        for k, v in sorted(sig.items(), key=lambda kv: -contrib[kv[0]]):
+            html += (f"<div class='sig'><div class='sig-row'><span>{SIGNAL_LABELS[k]}</span>"
+                     f"<span class='mono'>{v:.0%} <span style='color:{MUTED}'>× {Config.SCORING_WEIGHTS[k]:.0%}</span></span></div>"
+                     f"<div class='bar'><i style='width:{v * 100:.0f}%;background:{ACCENT if k == lead else NEUTRAL_1}'></i></div></div>")
+        st.markdown(html, unsafe_allow_html=True)
+
+    st.markdown("### Temuan")
+    st.markdown("<ul class='findings'>" + "".join(f"<li>{e}</li>" for e in c["signal_summary"]) + "</ul>",
+                unsafe_allow_html=True)
+
+    t1, t2, t3, t4 = st.tabs(["Bukti", "Jaringan", "Akun", "Tindakan dan laporan"])
+    with t1:
+        q = st.text_input("Cari", "", placeholder="Cari kata dalam konten bukti")
+        view = cposts[cposts["content"].str.contains(q, case=False, regex=False)] if q else cposts
+        view = view.assign(akun=view["account_id"].str.split(":").str[-1])
+        st.dataframe(view[["timestamp", "akun", "content", "hashtags", "urls"]], hide_index=True, width="stretch",
+                     height=360, column_config={"timestamp": "Waktu", "akun": "Akun", "content": st.column_config.TextColumn("Konten", width="large"),
+                                                "hashtags": "Tagar", "urls": "URL"})
+        csv = view.drop(columns=["ts"]).to_csv(index=False).encode()
+        digest = hashlib.sha256(csv).hexdigest()
+        a, b = st.columns([1, 3])
+        a.download_button("Unduh bukti (CSV)", csv, f"{cid}_bukti.csv", "text/csv")
+        b.markdown(f"<div class='meta' style='padding-top:10px'>SHA-256 {digest}</div>", unsafe_allow_html=True)
+        st.caption("Sidik jari SHA-256 membuktikan berkas bukti tidak berubah sejak diunduh (chain of custody)")
+    with t2:
+        fig = network_figure(edges, {a["account_id"]: a["role"] for a in accs})
+        if fig:
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.caption(f"Garis menghubungkan dua akun yang memposting narasi mirip, URL sama, atau tagar langka sama dalam "
+                   f"≤ {Config.COORDINATION_WINDOW_MIN} menit pada sedikitnya {Config.MIN_EDGE_WEIGHT:g} kesempatan berbeda. "
+                   f"Titik amber adalah penggerak (hub)")
+    with t3:
+        ref = posts_df["ts"].max().to_pydatetime()
+        rows = []
+        for a in accs:
+            meta = a["metadata"] or {}
+            aposts = posts_df[posts_df["account_id"] == a["account_id"]].to_dict("records")
+            s, reasons = FeatureExtractor.account_anomaly(meta, aposts, ref)
+            created = parse_ts(meta.get("created_at")) if meta.get("created_at") else None
+            rows.append({"": avatar(a["account_id"]), "Akun": a["account_id"].split(":")[-1],
+                         "Peran": "Penggerak" if a["role"] == "hub" else "Penguat",
+                         "Umur akun": f"{(ref - created).days} hari" if created else "-",
+                         "Follower": meta.get("followers"), "Anomali": s,
+                         "Indikator": ", ".join(reasons) or "-"})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", height=420, column_config={
+            "": st.column_config.ImageColumn("", width="small"),
+            "Anomali": st.column_config.ProgressColumn("Anomali profil", min_value=0, max_value=1, format="%.2f"),
+            "Indikator": st.column_config.TextColumn("Indikator", width="large")})
+        st.caption("Avatar adalah inisial buatan, bukan foto profil asli")
+    with t4:
+        left, right = st.columns([1, 1], gap="large")
+        with left:
+            with st.form("triage"):
+                opts = list(STATUS_LABEL)
+                new_status = st.radio("Keputusan analis", opts, format_func=STATUS_LABEL.get,
+                                      index=opts.index(c["status"]) if c["status"] in opts else 0)
+                note = st.text_area("Catatan analis", c.get("analyst_note") or "", height=120)
+                if st.form_submit_button("Simpan keputusan", type="primary"):
+                    db.update_campaign_status(cid, new_status, note)
+                    st.toast("Keputusan tersimpan")
+                    st.rerun()
+        with right:
+            brief = campaign_brief(c, accs, cposts.drop(columns=["ts"]).to_dict("records"))
+            st.markdown("Laporan intelijen singkat berisi ringkasan, indikator, akun penggerak, contoh bukti "
+                        "dan rekomendasi tindak lanjut sesuai tingkat risiko")
+            st.download_button("Unduh laporan (Markdown)", brief, f"laporan_{cid}.md", "text/markdown", type="primary")
+            with st.expander("Pratinjau laporan"):
+                st.markdown(brief)
+
+
+def network_figure(edges, roles):
     G = nx.Graph()
     for e in edges:
         G.add_edge(e["source"], e["target"], weight=e["weight"])
     if G.number_of_nodes() == 0:
         return None
-    pos = nx.spring_layout(G, seed=3, weight="weight", k=0.6)
+    pos = nx.spring_layout(G, seed=3, weight="weight", k=0.7)
     ex, ey = [], []
     for a, b in G.edges():
         ex += [pos[a][0], pos[b][0], None]
         ey += [pos[a][1], pos[b][1], None]
-    fig = go.Figure(go.Scatter(x=ex, y=ey, mode="lines", line=dict(width=0.6, color="#9aa5b1"), hoverinfo="skip",
-                               showlegend=False))
-    groups = {}
-    for n in G.nodes():
-        m = node_meta.get(n, {})
-        groups.setdefault(m.get("group", "-"), []).append(n)
-    for gname, nodes in groups.items():
+    fig = go.Figure(go.Scatter(x=ex, y=ey, mode="lines", line=dict(width=0.7, color="rgba(237,237,237,0.14)"),
+                               hoverinfo="skip", showlegend=False))
+    for role, name, col in [("amplifier", "Penguat", NEUTRAL_1), ("hub", "Penggerak", ACCENT)]:
+        nodes = [n for n in G.nodes() if roles.get(n, "amplifier") == role]
         fig.add_trace(go.Scatter(
-            x=[pos[n][0] for n in nodes], y=[pos[n][1] for n in nodes], mode="markers", name=gname,
-            marker=dict(size=[10 + 2.2 * G.degree(n) for n in nodes], color=node_meta.get(nodes[0], {}).get("color"),
-                        line=dict(width=1, color="white")),
-            text=[f"{n}<br>{node_meta.get(n, {}).get('hover', '')}" for n in nodes], hoverinfo="text"))
-    fig.update_layout(height=height, showlegend=True, margin=dict(t=10, b=10, l=10, r=10),
-                      xaxis=dict(visible=False), yaxis=dict(visible=False),
-                      legend=dict(orientation="h", y=-0.05), plot_bgcolor="rgba(0,0,0,0)")
+            x=[pos[n][0] for n in nodes], y=[pos[n][1] for n in nodes], mode="markers", name=name,
+            marker=dict(size=[10 + 1.6 * G.degree(n) for n in nodes], color=col, line=dict(width=1, color=BG)),
+            text=[n.split(":")[-1] for n in nodes], hovertemplate="%{text}<extra>" + name + "</extra>"))
+    plot_layout(fig, 460)
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
     return fig
 
 
-# ============================================================== pages
-if page == "🏠 Ringkasan Situasi":
-    st.title("🏠 Ringkasan Situasi Ruang Siber Sosial")
-    st.caption("Gambaran operasi pengaruh terkoordinasi (Coordinated Inauthentic Behavior) yang terdeteksi pada data terkini.")
+# ============================================================== page: Sumber data
+def page_sources():
+    st.title("Sumber data")
+    st.markdown(f"<div class='sub'>Data aktif: {data_source_line()}. Memuat sumber baru akan menggantikan data "
+                f"ini untuk semua pengguna demo</div>", unsafe_allow_html=True)
+    mode = st.segmented_control("Sumber", ["Data live", "Skenario demo", "Unggah file"], default="Data live",
+                                label_visibility="collapsed")
+    st.write("")
+    if mode == "Data live":
+        source_live()
+    elif mode == "Skenario demo":
+        source_demo()
+    elif mode == "Unggah file":
+        source_upload()
 
-    involved = set(members_df[members_df["campaign_id"].isin([c["campaign_id"] for c in flagged])]["account_id"]) \
-        if not members_df.empty else set()
-    n_posts = len(posts_df)
-    coord_posts = sum(c["post_count"] for c in flagged)
-    k = st.columns(5)
-    k[0].metric("Post dianalisis", f"{n_posts:,}")
-    k[1].metric("Akun dianalisis", f"{posts_df['account_id'].nunique() if n_posts else 0:,}")
-    k[2].metric("Campaign terdeteksi", len(flagged))
-    k[3].metric("Risiko TINGGI", sum(c["risk_level"] == "TINGGI" for c in flagged))
-    k[4].metric("Akun terlibat", len(involved),
-                f"{len(involved) / max(posts_df['account_id'].nunique(), 1):.0%} dari total", delta_color="off")
-
-    if n_posts:
-        st.subheader("Timeline aktivitas")
-        st.caption(f"{coord_posts} dari {n_posts} post ({coord_posts / n_posts:.1%}) berasal dari jaringan terkoordinasi. "
-                   "Area merah = lonjakan aktivitas (robust z-score). Perhatikan: tidak semua lonjakan adalah operasi — "
-                   "lonjakan organik (mis. berita gempa) tidak di-flag karena tidak ada koordinasi berulang.")
-        st.plotly_chart(timeline_chart(posts_df), width="stretch")
-
-    st.subheader("Campaign prioritas")
-    if not flagged:
-        st.info("Belum ada campaign terdeteksi. Buka **📥 Data & Deteksi** untuk memuat data dan menjalankan deteksi.")
-    for c in flagged:
-        with st.container(border=True):
-            a, b, cc = st.columns([5, 1.2, 1.2])
-            a.markdown(f"**{c['campaign_id']}** {risk_badge(c['risk_level'])} &nbsp; {STATUS_ICON.get(c['status'], '')} "
-                       f"`{c['status']}`<br>{c['description']}<br><small>🏷️ {c['topic_keywords']}</small>",
-                       unsafe_allow_html=True)
-            b.metric("Skor", f"{c['flag_score']:.2f}")
-            cc.metric("Akun / Post", f"{c['account_count']} / {c['post_count']}")
-            st.progress(c["flag_score"])
-
-elif page == "🔍 Investigasi Campaign":
-    st.title("🔍 Investigasi Campaign")
-    if not campaigns:
-        st.info("Belum ada campaign.")
-        st.stop()
-    show_all = st.toggle("Tampilkan juga cluster yang skornya di bawah ambang (dismissed)", value=False)
-    pool = campaigns if show_all else [c for c in campaigns if c["status"] != "dismissed"] or campaigns
-    sel = st.selectbox("Pilih campaign", pool, format_func=campaign_label)
-    c = db.get_campaign_by_id(sel["campaign_id"])
-    accs = db.get_campaign_accounts(c["campaign_id"])
-    cposts = db.get_posts_by_campaign(c["campaign_id"])
-    edges = db.get_campaign_edges(c["campaign_id"])
-
-    st.markdown(f"### {c['description']} &nbsp; {risk_badge(c['risk_level'])}", unsafe_allow_html=True)
-    m = st.columns(5)
-    m[0].metric("Skor koordinasi", f"{c['flag_score']:.2f}")
-    m[1].metric("Akun", c["account_count"])
-    m[2].metric("Post bukti", c["post_count"])
-    m[3].metric("Mulai", c["first_seen"][5:16].replace("T", " "))
-    m[4].metric("Status", f"{STATUS_ICON.get(c['status'], '')} {c['status']}")
-
-    left, right = st.columns([1, 1.25])
-    with left:
-        st.markdown("#### Mengapa di-flag?")
-        sig = c["signals"]
-        cats = [SIGNAL_LABELS[k] for k in sig]
-        fig = go.Figure(go.Scatterpolar(r=list(sig.values()) + [list(sig.values())[0]], theta=cats + [cats[0]],
-                                        fill="toself", line_color=RISK_COLOR[c["risk_level"]]))
-        fig.update_layout(polar=dict(radialaxis=dict(range=[0, 1], tickformat=".0%", tickfont_size=9)), height=320,
-                          margin=dict(t=30, b=30, l=110, r=110), showlegend=False)
-        st.plotly_chart(fig, width="stretch")
-        contrib = pd.DataFrame({"Sinyal": cats, "Skor": list(sig.values()),
-                                "Bobot": [Config.SCORING_WEIGHTS[k] for k in sig]})
-        contrib["Kontribusi"] = contrib["Skor"] * contrib["Bobot"]
-        st.dataframe(contrib.style.format({"Skor": "{:.0%}", "Bobot": "{:.0%}", "Kontribusi": "{:.3f}"}),
-                     hide_index=True, width="stretch")
-    with right:
-        st.markdown("#### Temuan (explainable)")
-        st.markdown("<ul class='expl'>" + "".join(f"<li>{e}</li>" for e in c["signal_summary"]) + "</ul>",
-                    unsafe_allow_html=True)
-        st.markdown("#### Pola sinkronisasi (barcode akun × waktu)")
-        pdf = pd.DataFrame(cposts)
-        pdf["ts"] = pd.to_datetime(pdf["timestamp"])
-        fig = px.scatter(pdf, x="ts", y="account_id", hover_data={"content": True, "ts": True, "account_id": False},
-                         height=320)
-        fig.update_traces(marker=dict(symbol="line-ns-open", size=14, line=dict(width=2),
-                                      color=RISK_COLOR[c["risk_level"]]))
-        fig.update_layout(margin=dict(t=10, b=10), yaxis_title=None, xaxis_title=None,
-                          yaxis=dict(showticklabels=len(accs) <= 20))
-        st.plotly_chart(fig, width="stretch")
-        st.caption("Garis vertikal yang sejajar = banyak akun memposting pada menit yang hampir sama, berulang kali.")
-
-    t1, t2, t3, t4 = st.tabs(["🕸️ Jaringan akun", "📝 Konten bukti", "👤 Profil akun", "🗂️ Tindak lanjut & laporan"])
-    with t1:
-        meta = {a["account_id"]: {"group": "Hub (penggerak)" if a["role"] == "hub" else "Amplifier",
-                                  "color": "#d62728" if a["role"] == "hub" else "#1f77b4",
-                                  "hover": f"peran: {a['role']}<br>dibuat: {a['metadata'].get('created_at', '-')}"
-                                           f"<br>follower: {a['metadata'].get('followers', '-')}"} for a in accs}
-        fig = network_figure(edges, meta, height=460)
-        if fig:
-            st.plotly_chart(fig, width="stretch")
-        st.caption("Edge = dua akun melakukan co-action (narasi mirip / URL sama / tagar langka) dalam ≤ "
-                   f"{Config.COORDINATION_WINDOW_MIN} menit pada ≥ {Config.MIN_EDGE_WEIGHT} kesempatan berbeda.")
-    with t2:
-        q = st.text_input("Cari dalam konten bukti", "")
-        view = pdf[pdf["content"].str.contains(q, case=False)] if q else pdf
-        st.dataframe(view[["timestamp", "account_id", "content", "hashtags", "urls"]], hide_index=True,
-                     width="stretch", height=380)
-        st.download_button("📥 Unduh bukti (CSV)", view.to_csv(index=False), f"{c['campaign_id']}_bukti.csv", "text/csv")
-    with t3:
-        adf = pd.DataFrame([{"akun": a["account_id"], "peran": a["role"], "derajat": a["degree"],
-                             "dibuat": a["metadata"].get("created_at"), "follower": a["metadata"].get("followers"),
-                             "following": a["metadata"].get("following")} for a in accs])
-        st.dataframe(adf, hide_index=True, width="stretch")
-        if adf["dibuat"].notna().any():
-            fig = px.histogram(adf, x="dibuat", nbins=20, height=240, title="Tanggal pembuatan akun")
-            fig.update_layout(margin=dict(t=40, b=10))
-            st.plotly_chart(fig, width="stretch")
-            st.caption("Akun yang dibuat dalam rentang sempit adalah indikator kuat sockpuppet/akun pesanan.")
-    with t4:
-        with st.form("triage"):
-            new_status = st.radio("Keputusan analis", ["flagged", "reviewed", "escalated", "dismissed"],
-                                  index=["flagged", "reviewed", "escalated", "dismissed"].index(c["status"])
-                                  if c["status"] in ("flagged", "reviewed", "escalated", "dismissed") else 0,
-                                  horizontal=True,
-                                  format_func=lambda s: {"flagged": "🔴 Perlu review", "reviewed": "🟡 Sudah direview",
-                                                         "escalated": "🚨 Eskalasi", "dismissed": "⚪ Bukan ancaman"}[s])
-            note = st.text_area("Catatan analis", c.get("analyst_note") or "")
-            if st.form_submit_button("💾 Simpan keputusan"):
-                db.update_campaign_status(c["campaign_id"], new_status, note)
-                st.success("Keputusan tersimpan.")
-                st.rerun()
-        brief = campaign_brief(c, accs, cposts)
-        st.download_button("📄 Unduh Laporan Intelijen (Markdown)", brief, f"laporan_{c['campaign_id']}.md",
-                           "text/markdown", type="primary")
-        with st.expander("Pratinjau laporan"):
-            st.markdown(brief)
-
-elif page == "🕸️ Peta Jaringan":
-    st.title("🕸️ Peta Jaringan Koordinasi")
-    st.caption("Seluruh akun yang terlibat co-action berulang. Warna = campaign hasil community detection (Louvain).")
-    meta, edges = {}, []
-    for c in campaigns:
-        if c["status"] == "dismissed" and not st.session_state.get("net_all"):
-            continue
-        for a in db.get_campaign_accounts(c["campaign_id"]):
-            meta[a["account_id"]] = {"group": f"{c['campaign_id']} ({c['risk_level']})",
-                                     "color": camp_color[c["campaign_id"]],
-                                     "hover": f"{c['description']}<br>peran: {a['role']}"}
-        edges += db.get_campaign_edges(c["campaign_id"])
-    st.toggle("Tampilkan cluster dismissed", key="net_all")
-    fig = network_figure(edges, meta, height=640)
-    if fig:
-        st.plotly_chart(fig, width="stretch")
-    else:
-        st.info("Belum ada jaringan terdeteksi.")
-
-elif page == "📥 Data & Deteksi":
-    st.title("📥 Data & Deteksi")
-    st.markdown(f"Database saat ini: **{db.count('posts'):,} post** dari **{db.count('accounts'):,} akun**.")
-    tab1, tab2, tab3 = st.tabs(["🧪 Dataset skenario (sintetis berlabel)", "📤 Unggah dataset sendiri",
-                                "⚙️ Parameter deteksi"])
-    with tab1:
-        st.markdown("Dataset sintetis meniru 3 operasi pengaruh nyata yang relevan bagi TNI AD "
-                    "(**hoaks rekrutmen jalur khusus**, **astroturfing tagar BBM**, **phishing bansos**) "
-                    "di tengah ~1.300 post organik + **event viral organik (gempa)** sebagai jebakan false-positive. "
-                    "Semua akun/URL fiktif — tidak memakai data pribadi pihak ketiga.")
+    st.divider()
+    with st.expander("Parameter deteksi"):
         c1, c2 = st.columns(2)
-        seed = c1.number_input("Seed", 0, 99999, 42)
-        diff = c2.slider("Tingkat kesulitan (penyamaran operasi)", 0.0, 1.0, 0.0, 0.1)
-        if st.button("Muat dataset & jalankan deteksi", type="primary"):
-            posts, accounts = generate_synthetic_dataset(seed=int(seed), difficulty=diff)
-            ingest(posts, accounts, db)
-            DetectionEngine(db).run_detection_pipeline(verbose=False)
-            st.success(f"{len(posts)} post dimuat dan dianalisis.")
-            st.rerun()
-    with tab2:
-        st.markdown("Format: CSV / JSON / JSONL. Kolom dikenali otomatis: "
-                    "`text|content|full_text`, `username|author|user_screen_name`, `created_at|timestamp|date`, "
-                    "opsional `user_created_at`, `followers_count`. Contoh: `data/raw/sample_social_posts.csv`.")
-        up = st.file_uploader("Pilih file", type=["csv", "json", "jsonl"])
-        if up is not None and st.button("Proses file", type="primary"):
-            try:
-                if up.name.endswith(".csv"):
-                    df = pd.read_csv(up)
-                else:
-                    df = pd.read_json(up, lines=up.name.endswith(".jsonl"))
-                posts, accounts = load_dataframe(df, platform=Path(up.name).stem)
-                ingest(posts, accounts, db)
-                DetectionEngine(db).run_detection_pipeline(verbose=False)
-                st.success(f"{len(posts)} post dari {len(accounts)} akun berhasil dianalisis.")
-                st.rerun()
-            except Exception as e:  # tampilkan error yang ramah untuk analis
-                st.error(f"Gagal memproses file: {e}")
-    with tab3:
-        st.markdown("Atur sensitivitas deteksi lalu jalankan ulang (berlaku untuk sesi ini).")
-        sim = st.slider("Ambang kemiripan narasi (cosine)", 0.3, 0.95, Config.SIMILARITY_THRESHOLD, 0.05)
-        win = st.slider("Jendela koordinasi (menit)", 5, 120, Config.COORDINATION_WINDOW_MIN, 5)
-        rep = st.slider("Minimal pengulangan co-action", 1.0, 5.0, float(Config.MIN_EDGE_WEIGHT), 0.5)
-        thr = st.slider("Ambang flag", 0.3, 0.9, Config.FLAG_THRESHOLD, 0.05)
-        if st.button("Jalankan dengan parameter ini"):
-            Cfg = type("RuntimeConfig", (Config,), {"SIMILARITY_THRESHOLD": sim, "COORDINATION_WINDOW_MIN": win,
+        sim = c1.slider("Ambang kemiripan narasi (cosine)", 0.3, 0.95, Config.SIMILARITY_THRESHOLD, 0.05)
+        win = c2.slider("Jendela koordinasi (menit)", 5, 120, Config.COORDINATION_WINDOW_MIN, 5)
+        rep = c1.slider("Minimal pengulangan co-action", 1.0, 5.0, float(Config.MIN_EDGE_WEIGHT), 0.5)
+        thr = c2.slider("Ambang flag", 0.3, 0.9, Config.FLAG_THRESHOLD, 0.05)
+        if st.button("Jalankan ulang deteksi"):
+            cfg = type("RuntimeConfig", (Config,), {"SIMILARITY_THRESHOLD": sim, "COORDINATION_WINDOW_MIN": win,
                                                     "MIN_EDGE_WEIGHT": rep, "FLAG_THRESHOLD": thr})
-            camps = DetectionEngine(db, config=Cfg).run_detection_pipeline(verbose=False)
-            st.success(f"Selesai: {sum(c['status'] == 'flagged' for c in camps)} campaign di-flag.")
-            st.rerun()
+            run_detection(cfg)
+            st.switch_page(PAGES["ancaman"])
 
-elif page == "📈 Evaluasi Akurasi":
-    st.title("📈 Evaluasi Akurasi (Ground Truth)")
-    st.markdown("Akurasi diukur di level akun terhadap label ground-truth dataset sintetis, dibandingkan dengan dua "
-                "pendekatan yang umum dipakai dashboard monitoring biasa:\n"
-                "- **Baseline A – Burst monitor**: flag semua akun yang posting saat terjadi lonjakan volume.\n"
-                "- **Baseline B – Duplicate filter**: flag akun yang memposting teks identik dengan akun lain.\n\n"
-                "**Tingkat kesulitan** mensimulasikan operator yang lebih rapi (jeda antar akun lebih lebar, "
-                "partisipasi tiap gelombang lebih rendah).")
-    bench = Path(__file__).resolve().parent.parent / "docs" / "benchmark.md"
-    if st.button("▶️ Jalankan benchmark (5 seed × 3 tingkat kesulitan, ±10 detik)", type="primary"):
-        from evaluation import run_benchmark
-        with st.spinner("Menjalankan benchmark..."):
-            st.session_state["bench"] = pd.DataFrame(run_benchmark())
-    if "bench" in st.session_state:
-        b = st.session_state["bench"]
-        fig = px.bar(b, x="difficulty", y="f1", color="method", barmode="group", height=380,
-                     labels={"difficulty": "Tingkat kesulitan", "f1": "F1-score", "method": "Metode"},
-                     color_discrete_sequence=["#d62728", "#95a5a6", "#bdc3c7"])
-        fig.update_layout(yaxis_tickformat=".0%", legend=dict(orientation="h", y=-0.25))
-        st.plotly_chart(fig, width="stretch")
-        st.dataframe(b.style.format({"difficulty": "{:.1f}", "precision": "{:.1%}", "recall": "{:.1%}", "f1": "{:.1%}"}),
-                     hide_index=True, width="stretch")
-    elif bench.exists():
-        st.markdown(bench.read_text())
 
-elif page == "🌐 Data Lapangan (Live)":
+def source_demo():
+    st.markdown("Skenario berlabel yang meniru tiga operasi nyata: hoaks rekrutmen jalur khusus, astroturfing "
+                "tagar BBM, dan phishing bansos, di tengah ±1.300 post organik dan satu event viral organik (gempa) "
+                "sebagai jebakan alarm palsu. Semua akun dan URL fiktif")
+    c1, c2 = st.columns(2)
+    seed = c1.number_input("Seed", 0, 99999, 42)
+    diff = c2.slider("Tingkat penyamaran operasi", 0.0, 1.0, 0.0, 0.1)
+    if st.button("Muat skenario dan analisis", type="primary"):
+        ingest(*generate_synthetic_dataset(seed=int(seed), difficulty=diff), db)
+        run_detection()
+        st.switch_page(PAGES["ancaman"])
+
+
+def source_upload():
+    st.markdown("CSV, JSON atau JSONL. Kolom dikenali otomatis: `text`, `username`, `created_at`, opsional "
+                "`user_created_at` dan `followers_count`")
+    up = st.file_uploader("File", type=["csv", "json", "jsonl"], label_visibility="collapsed")
+    if up is not None and st.button("Proses file", type="primary"):
+        try:
+            df = pd.read_csv(up) if up.name.endswith(".csv") else pd.read_json(up, lines=up.name.endswith(".jsonl"))
+            ingest(*load_dataframe(df, platform=Path(up.name).stem), db)
+            run_detection()
+            st.switch_page(PAGES["ancaman"])
+        except Exception as e:  # pesan ramah untuk analis
+            st.error(f"Gagal memproses file: {e}")
+
+
+def source_live():
     from connectors import (ScrapeCreators, get_scrapecreators_key, mastodon_hashtag, suspicious_accounts,
                             to_sentinel, viral_index)
-
-    st.title("🌐 Data Lapangan — Tarik Data Publik Nyata")
-    st.caption("Tarik post publik terbaru dari media sosial berdasarkan kata kunci/tagar, ukur **Indeks Potensi "
-               "Viral**, lalu jalankan deteksi koordinasi pada data nyata tersebut.")
     key = get_scrapecreators_key()
-    sources = ["ScrapeCreators (TikTok, X, Threads, YouTube, Instagram)"] if key else []
-    sources.append("Mastodon (gratis, tanpa API key)")
-    c1, c2 = st.columns([2, 1])
-    source = c1.radio("Sumber data", sources, horizontal=True)
-    if not key:
-        c1.caption("🔑 ScrapeCreators belum aktif — tambahkan `SCRAPECREATORS_API_KEY` di Streamlit Secrets "
-                   "untuk TikTok/X/Threads/YouTube/Instagram.")
-    mask = c2.toggle("🕶️ Mode Presentasi (samarkan identitas)", value=True,
-                     help="Username diganti kode anonim & avatar/URL tidak disimpan. Wajib aktif saat rekam video/screenshot.")
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        if key:
+            query = c1.text_input("Kata kunci atau tagar", "jalur khusus bintara")
+            plats = c1.multiselect("Platform", list(ScrapeCreators.PLATFORMS), default=["tiktok", "youtube"],
+                                   format_func=ScrapeCreators.PLATFORMS.get)
+            pages = c2.number_input("Halaman per platform", 1, 5, 1)
+            c2.markdown(f"<div class='meta'>±{len(plats) * pages} kredit</div>", unsafe_allow_html=True)
+        else:
+            c1.caption("Kunci ScrapeCreators belum diatur, jadi hanya Mastodon yang tersedia")
+            query = c1.text_input("Tagar Mastodon", "indonesia")
+            pages = c2.number_input("Halaman", 1, 10, 3)
+        mask = c2.toggle("Mode presentasi", value=True,
+                         help="Username diganti kode anonim, avatar dan URL tidak disimpan")
+        go_ = st.button("Tarik data", type="primary")
 
-    if source.startswith("ScrapeCreators"):
-        sc = ScrapeCreators(key)
-        query = st.text_input("Kata kunci / tagar", "jalur khusus bintara")
-        plats = st.multiselect("Platform", list(ScrapeCreators.PLATFORMS), default=["tiktok", "twitter", "youtube"],
-                               format_func=ScrapeCreators.PLATFORMS.get)
-        pages = st.slider("Halaman per platform (1 halaman = 1 kredit)", 1, 5, 1)
-        st.caption(f"Perkiraan biaya: {len(plats) * pages} kredit.")
-    else:
-        query = st.text_input("Tagar Mastodon (tanpa #)", "indonesia")
-        instance = st.text_input("Instance", "mastodon.social")
-        pages = st.slider("Halaman (40 post/halaman)", 1, 10, 3)
-
-    if st.button("📡 Tarik data", type="primary"):
+    if go_:
         raw, errors = [], []
-        with st.spinner("Menarik data publik..."):
-            if source.startswith("ScrapeCreators"):
+        with st.spinner("Menarik post publik"):
+            if key:
+                sc = ScrapeCreators(key)
                 for pf in plats:
                     try:
-                        raw += sc.search(pf, query, pages=pages)
+                        raw += sc.search(pf, query, pages=int(pages))
                     except Exception as e:
                         errors.append(f"{ScrapeCreators.PLATFORMS[pf]}: {e}")
             else:
                 try:
-                    raw = mastodon_hashtag(query, instance=instance, pages=pages)
+                    raw = mastodon_hashtag(query, pages=int(pages))
                 except Exception as e:
                     errors.append(str(e))
-        st.session_state["live_raw"], st.session_state["live_query"] = raw, query
+        st.session_state.update(live_raw=raw, live_query=query, live_mask=mask)
         for e in errors:
             st.warning(e)
-        if source.startswith("ScrapeCreators") and sc.credits_remaining is not None:
-            st.info(f"Sisa kredit ScrapeCreators: {sc.credits_remaining}")
 
     raw = st.session_state.get("live_raw")
-    if raw is not None:
-        if not raw:
-            st.warning("Tidak ada post ditemukan untuk kata kunci ini.")
-            st.stop()
-        vi = viral_index(raw)
-        st.subheader(f"Hasil: “{st.session_state['live_query']}”")
-        m = st.columns(5)
-        m[0].metric("Indeks Potensi Viral", f"{vi['score']}/100")
-        m[1].metric("Status", vi["label"])
-        m[2].metric("Perkiraan jangkauan", f"{vi['reach']:,}")
-        m[3].metric("Platform", vi["platforms"])
-        m[4].metric("Akun besar (≥100rb)", vi["big_accounts"])
-        st.caption("Indeks = kecepatan tayangan/jam (40%) + jangkauan total (25%) + sebaran lintas platform (15%) "
-                   "+ keterlibatan akun besar (20%). Bila platform tidak memberi jumlah tayangan, diestimasi dari interaksi.")
-        posts, accounts = to_sentinel(raw, mask=mask)
-        ldf = pd.DataFrame([{**{k: p[k] for k in ("timestamp", "platform", "account_id", "content")},
-                             **{k: p["metadata"].get(k) for k in ("views", "likes", "shares", "comments")}}
-                            for p in posts]).sort_values("timestamp")
-        ldf["ts"] = pd.to_datetime(ldf["timestamp"])
-        fig = px.histogram(ldf, x="ts", color="platform", nbins=40, height=260)
-        fig.update_layout(margin=dict(t=10, b=10), xaxis_title=None, yaxis_title="post",
-                          legend=dict(orientation="h", y=-0.3))
-        st.plotly_chart(fig, width="stretch")
-        st.dataframe(ldf.drop(columns="ts"), hide_index=True, width="stretch", height=300)
-        st.caption(f"{len(posts)} post dari {len(accounts)} akun. Data hanya berasal dari konten publik.")
-        acc_meta = {a["account_id"]: a["metadata"] for a in accounts}
-        sus = suspicious_accounts([{**p, "_account": acc_meta[p["account_id"]]} for p in posts])
-        st.subheader("🚩 Akun mencurigakan (lensa per akun)")
-        if sus:
-            st.caption("Akun tunggal yang membanjiri topik dengan narasi berulang (spam/buzzer/keyword stuffing). "
-                       "Ini melengkapi deteksi jaringan, yang hanya menandai koordinasi antar ≥3 akun.")
-            st.dataframe(pd.DataFrame(sus), hide_index=True, width="stretch")
-        else:
-            st.caption("Tidak ada akun tunggal yang menunjukkan pola spam pada hasil ini.")
-        if st.button("🔎 Analisis koordinasi pada data ini (menggantikan data di database)"):
-            ingest(posts, accounts, db)
-            camps = DetectionEngine(db).run_detection_pipeline(verbose=False)
-            st.session_state.pop("live_raw")
-            st.success(f"Selesai: {sum(c['status'] == 'flagged' for c in camps)} campaign di-flag dari "
-                       f"{len(camps)} cluster. Buka 🏠 Ringkasan / 🔍 Investigasi untuk melihat hasil.")
+    if raw is None:
+        return
+    if not raw:
+        st.warning("Tidak ada post ditemukan untuk kata kunci ini")
+        return
+    vi = viral_index(raw)
+    posts, accounts = to_sentinel(raw, mask=st.session_state.get("live_mask", True))
+    st.markdown(f"### Hasil untuk “{st.session_state['live_query']}”")
+    color = HIGH if vi["score"] >= 65 else ACCENT if vi["score"] >= 35 else MUTED
+    left, right = st.columns([1, 2], gap="large")
+    with left:
+        st.markdown(f"<div class='panel'><div class='meta'>Indeks potensi viral</div>"
+                    f"<div class='score' style='color:{color};margin:8px 0'>{vi['score']}</div>"
+                    f"<div style='color:{TEXT};font-size:14px'>{vi['label']}</div>"
+                    f"<div class='meta' style='margin-top:16px'>jangkauan ±{vi['reach']:,} tayangan<br>"
+                    f"{vi['platforms']} platform · {vi['big_accounts']} akun ≥100rb follower<br>"
+                    f"{len(posts)} post · {len(accounts)} akun</div></div>", unsafe_allow_html=True)
+        st.caption("Kecepatan tayangan per jam 40%, jangkauan 25%, sebaran lintas platform 15%, "
+                   "keterlibatan akun besar 20%")
+    with right:
+        ldf = pd.DataFrame([{"Waktu": fmt_ts(p["timestamp"]), "Platform": p["platform"],
+                             "Akun": p["account_id"].split(":")[-1], "Konten": p["content"],
+                             "Tayangan": p["metadata"].get("views"), "Suka": p["metadata"].get("likes")}
+                            for p in posts]).sort_values("Tayangan", ascending=False, na_position="last")
+        st.dataframe(ldf, hide_index=True, width="stretch", height=300,
+                     column_config={"Konten": st.column_config.TextColumn("Konten", width="large")})
 
-else:
-    st.title("ℹ️ Metodologi")
+    acc_meta = {a["account_id"]: a["metadata"] for a in accounts}
+    sus = suspicious_accounts([{**p, "_account": acc_meta[p["account_id"]]} for p in posts])
+    st.markdown("### Akun tunggal mencurigakan")
+    if sus:
+        sdf = pd.DataFrame(sus)
+        sdf.insert(0, "", sdf["account_id"].map(avatar))
+        sdf["account_id"] = sdf["account_id"].str.split(":").str[-1]
+        st.dataframe(sdf, hide_index=True, width="stretch", column_config={
+            "": st.column_config.ImageColumn("", width="small"), "account_id": "Akun",
+            "skor": st.column_config.ProgressColumn("Skor", min_value=0, max_value=1, format="%.2f"),
+            "alasan": st.column_config.TextColumn("Alasan", width="large"), "contoh": "Contoh post"})
+        st.caption("Akun yang membanjiri topik dengan narasi berulang. Ini melengkapi deteksi jaringan, "
+                   "yang hanya menandai koordinasi antara tiga akun atau lebih")
+    else:
+        st.caption("Tidak ada akun tunggal dengan pola spam pada hasil ini")
+
+    if st.button("Analisis koordinasi pada data ini", type="primary"):
+        ingest(posts, accounts, db)
+        run_detection()
+        st.session_state.pop("live_raw", None)
+        st.switch_page(PAGES["ancaman"])
+
+
+# ============================================================== page: Metodologi
+def page_method():
+    st.title("Metodologi dan akurasi")
+    st.markdown(f"<div class='sub'>{Config.APP_NAME} menilai perilaku terkoordinasi, bukan isi opini. Yang diukur "
+                "adalah apakah sekelompok akun bertindak serentak, berulang dan seragam</div>", unsafe_allow_html=True)
     st.markdown(f"""
-**{Config.APP_NAME}** mendeteksi *perilaku terkoordinasi*, bukan opini. Sistem tidak menilai benar/salahnya isi
-post maupun sikap politik — yang dinilai adalah **apakah sekelompok akun bertindak secara tidak autentik dan
-terorkestrasi**. Pendekatan ini sejalan dengan definisi *Coordinated Inauthentic Behavior* yang dipakai platform
-global, dan menjaga netralitas institusi.
-
 | Tahap | Teknik | Tujuan |
 |---|---|---|
-| 1. Normalisasi | Kamus slang medsos Indonesia (yg→yang, gak→tidak, …), hapus URL/emoji | Menyamakan variasi ejaan operator |
-| 2. Representasi | TF-IDF **char n-gram (3–5)** | Tahan typo & parafrase ringan; ringan tanpa GPU |
-| 3. Co-action | Sliding window ≤ {Config.COORDINATION_WINDOW_MIN} menit: narasi mirip (cos ≥ {Config.SIMILARITY_THRESHOLD}), URL sama, tagar langka sama | Menangkap aksi serentak |
-| 4. Graf koordinasi | Edge hanya bila co-action **berulang ≥ {Config.MIN_EDGE_WEIGHT} episode** | Menyaring kebetulan & event viral organik |
-| 5. Clustering | Louvain community detection + k-core (k=2) | Memisahkan operasi berbeda, buang akun "nyangkut" |
-| 6. Scoring | 5 sinyal berbobot: konten {Config.SCORING_WEIGHTS['content']:.0%}, timing {Config.SCORING_WEIGHTS['timing']:.0%}, akun {Config.SCORING_WEIGHTS['account']:.0%}, jaringan {Config.SCORING_WEIGHTS['network']:.0%}, amplifikasi {Config.SCORING_WEIGHTS['amplification']:.0%} | Skor yang bisa dijelaskan ke pimpinan |
-| 7. Triage | Status flagged → reviewed / escalated / dismissed + catatan + laporan | Human-in-the-loop |
-
-**Prinsip desain**
-- *Explainable*: setiap skor disertai alasan berbahasa Indonesia & bukti konten.
-- *Human-in-the-loop*: sistem merekomendasikan, analis memutuskan.
-- *Ringan & on-premise*: berjalan di laptop tanpa GPU/internet, cocok untuk jaringan tertutup satuan.
-- *Privasi*: demo memakai data sintetis; data nyata cukup berupa post publik.
+| Normalisasi | Kamus slang medsos Indonesia, hapus URL dan emoji | Menyamakan variasi ejaan operator |
+| Representasi | TF-IDF char n-gram 3–5 | Tahan typo dan parafrase ringan, tanpa GPU |
+| Co-action | Jendela ≤ {Config.COORDINATION_WINDOW_MIN} menit: narasi mirip, URL sama, tagar langka sama | Menangkap aksi serentak |
+| Graf koordinasi | Garis hanya bila co-action berulang di ≥ {Config.MIN_EDGE_WEIGHT:g} episode | Menyaring kebetulan dan viral organik |
+| Clustering | Louvain + 2-core | Memisahkan operasi, membuang akun yang ikut secara kebetulan |
+| Skor | Konten {Config.SCORING_WEIGHTS['content']:.0%}, waktu {Config.SCORING_WEIGHTS['timing']:.0%}, akun {Config.SCORING_WEIGHTS['account']:.0%}, jaringan {Config.SCORING_WEIGHTS['network']:.0%}, amplifikasi {Config.SCORING_WEIGHTS['amplification']:.0%} | Skor yang bisa dijelaskan |
+| Triage | Keputusan analis, catatan, laporan, hash bukti | Manusia tetap memutuskan |
 """)
+    st.markdown("### Akurasi terhadap ground truth")
+    st.markdown("F1-score level akun pada skenario berlabel, rata-rata 5 seed per tingkat penyamaran, dibandingkan "
+                "dua pendekatan umum: burst monitor (flag semua akun saat lonjakan volume) dan *duplicate filter* "
+                "(flag akun yang memposting teks identik)")
+    if st.button("Jalankan benchmark (±10 detik)"):
+        from evaluation import run_benchmark
+        with st.spinner("Menjalankan benchmark"):
+            st.session_state["bench"] = pd.DataFrame(run_benchmark())
+    b = st.session_state.get("bench")
+    if b is None:
+        b = pd.DataFrame([
+            {"difficulty": d, "method": m, "f1": f} for d, vals in
+            {0.0: (1.0, .2248, .3604), 0.5: (.9526, .1761, .3467), 1.0: (.68, .1631, .341)}.items()
+            for m, f in zip(["SENTINEL", "Baseline A (burst monitor)", "Baseline B (duplicate filter)"], vals)])
+        st.caption("Hasil tersimpan dari docs/benchmark.md. Tekan tombol untuk menghitung ulang")
+    fig = go.Figure()
+    for m, col in [("SENTINEL", ACCENT), ("Baseline B (duplicate filter)", NEUTRAL_1),
+                   ("Baseline A (burst monitor)", NEUTRAL_2)]:
+        s = b[b["method"] == m]
+        fig.add_bar(x=s["difficulty"].map(lambda d: f"penyamaran {d:.1f}"), y=s["f1"], name=m.replace("Baseline ", ""),
+                    marker_color=col, marker_line_width=0, text=s["f1"].map(lambda v: f"{v:.0%}"),
+                    textposition="outside", textfont=dict(family="IBM Plex Mono", size=11))
+    fig.update_layout(barmode="group", bargap=0.35, yaxis_tickformat=".0%", yaxis_range=[0, 1.12])
+    st.plotly_chart(plot_layout(fig, 320), width="stretch", config={"displayModeBar": False})
+    st.caption("Precision SENTINEL 100% di semua tingkat: tidak ada akun organik yang dituduh. Pada penyamaran "
+               "tertinggi recall turun ke 52%, keterbatasan yang kami ungkap apa adanya")
+    st.markdown("<div class='meta'>Desain antarmuka mengikuti metode unslop oleh Damir Sokolovsky, CC BY 4.0</div>",
+                unsafe_allow_html=True)
+
+
+# ============================================================== navigation
+PAGES = {
+    "ancaman": st.Page(page_threats, title="Ancaman", icon=":material/radar:", default=True, url_path="ancaman"),
+    "kasus": st.Page(page_case, title="Kasus", icon=":material/folder_open:", url_path="kasus"),
+    "sumber": st.Page(page_sources, title="Sumber data", icon=":material/database:", url_path="sumber"),
+    "metode": st.Page(page_method, title="Metodologi", icon=":material/science:", url_path="metodologi"),
+}
+st.logo(str(Path(__file__).resolve().parent / "logo.svg"), size="large")
+nav = st.navigation(list(PAGES.values()))
+with st.sidebar:
+    run = db.get_last_run()
+    level, color = threat_level()
+    st.markdown(f"<div class='meta' style='margin-top:8px'>Deteksi operasi pengaruh · siber sosial</div>"
+                f"<div style='margin-top:24px;font-size:13px;color:{TEXT_2}'>{dot(color)}Status {level}</div>"
+                f"<div class='meta' style='margin-top:8px'>{data_source_line()}"
+                + (f"<br>deteksi {fmt_ts(run['started_at'])} · {run['duration_s']} dtk" if run else "")
+                + "</div>", unsafe_allow_html=True)
+nav.run()

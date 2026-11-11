@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="28" viewBox="0 0 160 28">
+  <circle cx="12" cy="14" r="10" fill="none" stroke="#ededed" stroke-width="1.5"/>
+  <circle cx="12" cy="14" r="5" fill="none" stroke="#ededed" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="12" cy="14" r="2" fill="#e0a040"/>
+  <text x="32" y="19.5" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="600" letter-spacing="1.5" fill="#ededed">SENTINEL</text>
+</svg>

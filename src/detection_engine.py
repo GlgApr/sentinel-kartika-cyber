@@ -182,7 +182,7 @@ class DetectionEngine:
             f"{waves} gelombang terpisah ({first[:16].replace('T', ' ')} s/d {last[:16].replace('T', ' ')}).",
             f"Keseragaman narasi {signals['content']:.0%}: post dari akun berbeda memakai template teks yang nyaris sama "
             f"(co-action konten: {ev_types.get('content', 0)}, URL: {ev_types.get('url', 0)}, tagar: {ev_types.get('hashtag', 0)}).",
-            f"{sync_ratio:.0%} post bukti diunggah <= 10 menit dari post akun lain dalam cluster.",
+            f"{sync_ratio:.0%} post bukti diunggah ≤ 10 menit dari post akun lain dalam cluster.",
         ]
         if acc_reasons:
             top = ", ".join(f"{r} ({n} akun)" for r, n in acc_reasons.most_common(3))

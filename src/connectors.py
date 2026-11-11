@@ -139,7 +139,10 @@ class ScrapeCreators:
             raise RuntimeError("Kredit ScrapeCreators habis (HTTP 402).")
         if r.status_code in (401, 403):
             raise RuntimeError("API key ScrapeCreators ditolak (HTTP %s)." % r.status_code)
-        r.raise_for_status()
+        if r.status_code >= 500:
+            raise RuntimeError(f"server sumber sedang gagal (HTTP {r.status_code}), coba lagi atau pakai kata kunci lain")
+        if r.status_code >= 400:
+            raise RuntimeError(f"permintaan ditolak (HTTP {r.status_code})")
         data = r.json()
         self.credits_remaining = data.get("credits_remaining", self.credits_remaining)
         return data
