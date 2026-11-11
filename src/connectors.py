@@ -103,9 +103,18 @@ def get_scrapecreators_key():
         return key
     try:
         import streamlit as st
-        return st.secrets.get("SCRAPECREATORS_API_KEY")
-    except Exception:  # secrets.toml tidak ada
-        return None
+        key = st.secrets.get("SCRAPECREATORS_API_KEY")
+        if key:
+            return key
+    except Exception:  # secrets.toml tidak ada di lokasi default Streamlit
+        pass
+    # fallback: .streamlit/secrets.toml di root proyek (bila app dijalankan dari folder lain)
+    import tomllib
+    from pathlib import Path
+    f = Path(__file__).resolve().parent.parent / ".streamlit" / "secrets.toml"
+    if f.exists():
+        return tomllib.loads(f.read_text()).get("SCRAPECREATORS_API_KEY")
+    return None
 
 
 # ----------------------------------------------------------------------------- ScrapeCreators
@@ -156,6 +165,7 @@ class ScrapeCreators:
                                _get(a, "statistics.play_count"), _get(a, "statistics.digg_count"),
                                _get(a, "statistics.share_count"), _get(a, "statistics.comment_count"),
                                _get(a, "author.follower_count"), _get(a, "author.avatar_medium.url_list.0")))
+            posts[-1]["_account"]["following"] = _to_int(_get(a, "author.following_count"))
         return posts, d.get("cursor") if d.get("has_more", True) else None
 
     def _tiktok_hashtag(self, q, cursor):
@@ -307,3 +317,44 @@ def viral_index(posts, now=None):
     label = "VIRAL — segera respons" if score >= 65 else "Mulai menyebar" if score >= 35 else "Belum menyebar"
     return {"score": score, "label": label, "reach": reach, "median_velocity": v_med,
             "platforms": platforms, "big_accounts": big, "posts": len(posts)}
+
+
+def suspicious_accounts(posts, min_posts=3):
+    """Lensa per akun (buzzer/spam tunggal) — melengkapi deteksi jaringan.
+
+    Menandai akun yang dalam hasil tarikan: mengulang narasi nyaris identik,
+    atau memposting sangat sering untuk satu topik. Return list dict terurut skor."""
+    from collections import defaultdict
+    from feature_extraction import normalize_text
+    by = defaultdict(list)
+    for p in posts:
+        by[p["account_id"]].append(p)
+    out = []
+    for acc, ps in by.items():
+        if len(ps) < min_posts:
+            continue
+        keys = [normalize_text(p["content"])[:80] for p in ps]
+        dup = 1 - len(set(keys)) / len(keys)
+        ts = sorted(datetime.fromisoformat(p["timestamp"]) for p in ps)
+        span_d = max((ts[-1] - ts[0]).total_seconds() / 86400, 1)
+        rate = len(ps) / span_d
+        meta = ps[0].get("_account") or {}
+        reasons, score = [], 0.0
+        if dup >= 0.5:
+            score += 0.5
+            reasons.append(f"{dup:.0%} post adalah salinan narasi yang sama")
+        if len(ps) >= 5:
+            score += 0.2
+            reasons.append(f"{len(ps)} post untuk satu topik pencarian")
+        if rate >= 2:
+            score += 0.15
+            reasons.append(f"{rate:.1f} post/hari")
+        fol, fing = meta.get("followers"), meta.get("following")
+        if fol is not None and fing is not None and fing <= 2 and fol > 1000:
+            score += 0.15
+            reasons.append("hampir tidak mengikuti akun lain (pola akun promosi/terkelola)")
+        if score >= 0.5:
+            out.append({"account_id": acc, "skor": round(min(score, 1), 2), "post": len(ps),
+                        "duplikasi": round(dup, 2), "follower": fol, "alasan": "; ".join(reasons),
+                        "contoh": ps[0]["content"][:120]})
+    return sorted(out, key=lambda r: -r["skor"])

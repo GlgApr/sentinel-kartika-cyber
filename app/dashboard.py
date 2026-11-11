@@ -379,7 +379,8 @@ elif page == "📈 Evaluasi Akurasi":
         st.markdown(bench.read_text())
 
 elif page == "🌐 Data Lapangan (Live)":
-    from connectors import ScrapeCreators, get_scrapecreators_key, mastodon_hashtag, to_sentinel, viral_index
+    from connectors import (ScrapeCreators, get_scrapecreators_key, mastodon_hashtag, suspicious_accounts,
+                            to_sentinel, viral_index)
 
     st.title("🌐 Data Lapangan — Tarik Data Publik Nyata")
     st.caption("Tarik post publik terbaru dari media sosial berdasarkan kata kunci/tagar, ukur **Indeks Potensi "
@@ -453,6 +454,15 @@ elif page == "🌐 Data Lapangan (Live)":
         st.plotly_chart(fig, width="stretch")
         st.dataframe(ldf.drop(columns="ts"), hide_index=True, width="stretch", height=300)
         st.caption(f"{len(posts)} post dari {len(accounts)} akun. Data hanya berasal dari konten publik.")
+        acc_meta = {a["account_id"]: a["metadata"] for a in accounts}
+        sus = suspicious_accounts([{**p, "_account": acc_meta[p["account_id"]]} for p in posts])
+        st.subheader("🚩 Akun mencurigakan (lensa per akun)")
+        if sus:
+            st.caption("Akun tunggal yang membanjiri topik dengan narasi berulang (spam/buzzer/keyword stuffing). "
+                       "Ini melengkapi deteksi jaringan, yang hanya menandai koordinasi antar ≥3 akun.")
+            st.dataframe(pd.DataFrame(sus), hide_index=True, width="stretch")
+        else:
+            st.caption("Tidak ada akun tunggal yang menunjukkan pola spam pada hasil ini.")
         if st.button("🔎 Analisis koordinasi pada data ini (menggantikan data di database)"):
             ingest(posts, accounts, db)
             camps = DetectionEngine(db).run_detection_pipeline(verbose=False)
