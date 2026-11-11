@@ -6,3 +6,4 @@ __pycache__/
 data/processed/*.db
 venv/
 docs/AUDIT-DAN-STRATEGI.md
+docs/DETAIL-PROGRAM.md

@@ -2,6 +2,8 @@
 
 **Kartika Cyber Hackathon 2026 · Kategori: Siber Sosial**
 
+🔗 **Demo online:** https://sentinel-kartika-cyber.streamlit.app/
+
 SENTINEL membantu analis siber TNI AD menemukan **jaringan akun yang bergerak terorkestrasi**
 (buzzer, sockpuppet, bot) yang menyebarkan hoaks, penipuan, atau disinformasi — misalnya
 **hoaks rekrutmen "jalur khusus" yang mencatut nama TNI AD**, astroturfing tagar
