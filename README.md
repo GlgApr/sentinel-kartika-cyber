@@ -17,9 +17,9 @@ SENTINEL mendeteksi **perilaku terkoordinasi** (*Coordinated Inauthentic Behavio
 |---|---|---|
 | Yang dideteksi | Lonjakan volume / sentimen | **Jaringan akun yang bertindak serentak & berulang** |
 | Event viral organik (mis. gempa) | Ikut ter-flag (false positive) | **Tidak di-flag** — tidak ada koordinasi berulang |
-| Variasi teks/typo operator | Lolos filter duplikat | **Tertangkap** (char n-gram + normalisasi slang) |
+| Variasi teks, huruf unicode "fancy", homoglyph | Lolos filter duplikat | **Tertangkap** (NFKC + char n-gram + kunci skeleton) |
 | Output | Grafik | **Campaign + skor + alasan + bukti + laporan intelijen** |
-| F1-score (benchmark) | 22–36 % | **100 % (normal), 95 % (operator rapi)** |
+| F1 pada **komentar TikTok asli** (held-out, label manual) | 8–18 % | **94 %** (precision 100 %, 0 akun dituduh salah) |
 
 ## 💡 Kebaruan
 
@@ -28,11 +28,14 @@ SENTINEL mendeteksi **perilaku terkoordinasi** (*Coordinated Inauthentic Behavio
    seragam), sehingga langsung bekerja pada narasi baru hari ini, dan netral terhadap isi opini.
 2. **Kriteria "koordinasi berulang".** Dua akun baru dianggap terhubung bila ber-co-action di ≥2 episode
    terpisah. Ini yang membedakan viral rekayasa dari viral organik (uji: berita gempa tidak ter-flag).
-3. **Dua lensa yang saling menguatkan**: jaringan (Louvain atas graf co-action) dan **buzzer detector per
-   akun** (identitas, ritme, konten, interaksi, jejaring), keduanya menjelaskan setiap alasannya.
-4. **Dibuat untuk medsos Indonesia**: normalisasi slang (`yg`, `gak`, `udh`) + char n-gram tahan typo.
-5. **Akurasi terukur, bukan klaim**: generator skenario berlabel sebagai *evaluation harness* — F1 jaringan
-   100% vs baseline 22–36%; buzzer detector per akun F1 93,6% tanpa sinyal jaringan.
+3. **Tiga pola operasi nyata**: gelombang serentak, motif yang berulang lintas gelombang (templat + kode
+   merek berganti), dan operasi templat "tetes lambat" berhari-hari tanpa keserempakan. Ketiganya
+   ditemukan di spam judi online asli di TikTok Indonesia.
+4. **Dibuat untuk medsos Indonesia**: slang (`yg`, `gak`), kata ulang (`laki2`), huruf unicode "fancy"
+   (`𝐆𝐀𝐌𝐄𝟏𝟗𝟏`), angka dekoratif (`➋➐`), dan homoglyph (`VlKlNG27` = `VIKING27`).
+5. **Diuji di data asli, termasuk kegagalannya**: dari **0 tertangkap** pada versi awal ke F1 94 % pada
+   komentar TikTok held-out, dengan setiap perbaikan diuji ulang pada data segar. Skor per akun **tidak**
+   lolos uji Cresci-2017 dan kami nyatakan terbuka. Lihat [docs/uji-data-asli.md](docs/uji-data-asli.md).
 6. **Siap operasi**: data live TikTok/YouTube/X/Threads/Instagram, Indeks Potensi Viral, hash SHA-256 bukti
    (*chain of custody*), laporan intelijen, keputusan analis tercatat.
 
@@ -69,11 +72,13 @@ Data nyata (CSV/JSON/JSONL dengan kolom `text`, `username`, `created_at`, opsion
 ## 🧠 Cara kerja
 
 ```
-Post medsos ─► Normalisasi slang ─► TF-IDF char n-gram ─► Co-action (≤20 menit):
-                                                           • narasi mirip  • URL sama  • tagar langka sama
+Post medsos ─► Normalisasi (NFKC, slang, homoglyph) ─► TF-IDF char n-gram ─► Co-action (≤20 menit):
+                                                    • narasi mirip  • URL sama  • tagar/mention/kode merek langka sama
           ┌───────────────────────────────────────────────────────────┘
           ▼
- Graf koordinasi akun (edge hanya jika co-action BERULANG ≥2 episode)
+ Graf koordinasi akun (edge hanya jika BERULANG: pasangan ≥2 episode, atau motif sama ≥2 gelombang)
+          ▼
+ + Operasi templat "tetes lambat" (templat ↔ kode merek berputar, tanpa keserempakan)
           ▼
  Louvain community detection + k-core ─► kandidat campaign
           ▼
@@ -82,19 +87,31 @@ Post medsos ─► Normalisasi slang ─► TF-IDF char n-gram ─► Co-action 
  Dashboard: Ancaman (antrean terurut) → Kasus (barcode sinkronisasi, bukti + hash SHA-256, jaringan, akun) → tindakan & laporan
 ```
 
-Detail: [docs/arsitektur-sistem.md](docs/arsitektur-sistem.md) · Hasil uji: [docs/benchmark.md](docs/benchmark.md)
+Detail: [docs/arsitektur-sistem.md](docs/arsitektur-sistem.md) · Uji data asli: [docs/uji-data-asli.md](docs/uji-data-asli.md) · Benchmark sintetis: [docs/benchmark.md](docs/benchmark.md)
 
-## 📈 Hasil benchmark (5 seed × 3 tingkat kesulitan)
+## 📈 Hasil uji
+
+**Data asli** — komentar TikTok Indonesia, held-out (kode dibekukan sebelum data ditarik), 2.002 komentar,
+69 akun spam judol berlabel manual:
+
+| Metode | Precision | Recall | F1 | Akun dituduh salah |
+|---|---|---|---|---|
+| **SENTINEL** | **100 %** | **88 %** | **94 %** | **0** |
+| Duplicate filter | 13 % | 28 % | 18 % | 124 |
+| Burst monitor | 4 % | 99 % | 8 % | 1.617 |
+
+Di seluruh 8.000+ komentar asli yang diuji, tidak ada akun organik yang dituduh; slogan politik yang
+diulang banyak akun tidak di-flag tanpa bukti koordinasi. Batas yang ditemukan (Cresci-2017): bot
+retweet yang tidak serentak baru tertangkap 29 %, dan kerumunan asli yang menjawab satu akun pemancing
+bisa memicu alarm palsu. Detail: [docs/uji-data-asli.md](docs/uji-data-asli.md).
+
+**Skenario sintetis berlabel** (pagar regresi, 5 seed × 3 tingkat penyamaran):
 
 | Kesulitan | SENTINEL F1 | Burst monitor F1 | Duplicate filter F1 |
 |---|---|---|---|
 | 0.0 (normal) | **100 %** | 22 % | 36 % |
-| 0.5 | **95 %** | 18 % | 35 % |
-| 1.0 (operator sangat rapi) | **68 %** (precision tetap 100 %) | 16 % | 34 % |
-
-Precision tetap 100 % di semua tingkat: sistem **tidak pernah menuduh akun organik**, termasuk saat
-ada event viral (gempa) yang memicu lonjakan besar. Penurunan recall pada tingkat 1.0 adalah
-keterbatasan yang kami ungkap secara jujur dan menjadi bahan pengembangan (jendela adaptif).
+| 0.5 | **100 %** | 18 % | 35 % |
+| 1.0 (operator sangat rapi) | **95 %** (precision 100 %) | 16 % | 34 % |
 
 ## 📁 Struktur
 
@@ -102,9 +119,9 @@ keterbatasan yang kami ungkap secara jujur dan menjadi bahan pengembangan (jende
 src/   config.py · database.py · data_ingestion.py · feature_extraction.py
        detection_engine.py · buzzer.py · evaluation.py · report.py · connectors.py
 app/   dashboard.py (Streamlit) · dashboard_cli.py
-tests/ test_pipeline.py · test_connectors.py (14 tes)
+tests/ test_pipeline.py · test_connectors.py (17 tes)
 data/  raw/sample_social_posts.csv · processed/detection.db
-docs/  arsitektur-sistem.md · benchmark.md
+docs/  arsitektur-sistem.md · uji-data-asli.md · benchmark.md
 ```
 
 ## ⚖️ Etika & kepatuhan

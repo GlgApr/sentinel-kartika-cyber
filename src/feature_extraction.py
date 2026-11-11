@@ -11,6 +11,7 @@
 
 import math
 import re
+import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime
 
@@ -20,8 +21,16 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from config import Config
 
 URL_RE = re.compile(r"(https?://\S+|\b[\w-]+\.(?:com|id|xyz|net|org|ly|co)/\S*)", re.I)
-NON_WORD = re.compile(r"[^0-9a-z#\s]+")
 MULTI_SPACE = re.compile(r"\s+")
+MENTION = re.compile(r"@(\w+)")
+# huruf dieja terpisah untuk mengelabui filter: "u b e t 9 6" -> "ubet96"
+SPACED = re.compile(r"(?<!\S)(?:\w ){2,}\w(?!\S)")
+# kode merek/promosi: token campuran huruf+angka (xv99, mmm5, game191, slot88)
+CODE = re.compile(r"^(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\d)[a-z0-9]{3,12}$")
+# angka + satuan bukan kode merek: 5kg, 80rb, 5jt, 2x, 14pro, 2026an
+# kata ulang informal Indonesia bukan kode merek: laki2, orang2, tiba2, bener2
+REDUP = re.compile(r"^[a-z]{2,}2$")
+UNIT = re.compile(r"^\d+(?:kg|g|gr|rb|ribu|jt|juta|k|m|t|gb|mb|tb|km|cm|mm|ml|l|jam|hari|th|thn|tahun|an|x|pk|am|pm|s|an|nya|pro|max|plus)$")
 
 # Normalisasi slang umum medsos Indonesia -> bentuk baku
 SLANG_MAP = {
@@ -46,11 +55,54 @@ def parse_ts(s):
         return None
 
 
+def _keep(ch):
+    # pertahankan huruf/angka SEMUA aksara (Latin, Thai, Arab, Jawa, ...) + tanda vokal;
+    # buang emoji, simbol, tanda baca
+    return ch in "# " or unicodedata.category(ch)[0] in "LMN"
+
+
+def fold(text):
+    """NFKC + angka dekoratif -> angka biasa. 𝐆𝐀𝐌𝐄𝟏𝟗𝟏 -> game191, VIKING➋➐ -> viking27."""
+    t = unicodedata.normalize("NFKC", str(text)).lower()
+    return "".join(str(unicodedata.digit(ch)) if not ch.isascii() and unicodedata.digit(ch, None) is not None
+                   else ch for ch in t)
+
+
+DISPLAY = {}  # kunci skeleton -> ejaan asli pertama yang terlihat (untuk ditampilkan ke analis)
+
+
+def skeleton(code):
+    """Kunci pembanding kode merek tahan homoglyph: vlklng27 / viking27 -> viking27."""
+    key = code.replace("l", "i").replace("|", "i")
+    DISPLAY.setdefault(key, code)
+    return key
+
+
+def display_entity(key):
+    return DISPLAY.get(key, key)
+
+
 def normalize_text(text):
-    t = URL_RE.sub(" ", str(text).lower())
-    t = NON_WORD.sub(" ", t)
-    words = [SLANG_MAP.get(w, w) for w in t.split()]
-    return MULTI_SPACE.sub(" ", " ".join(words)).strip()
+    # NFKC: huruf "fancy" unicode (𝐆𝐀𝐌𝐄𝟏𝟗𝟏, ｓｌｏｔ) -> ASCII biasa; trik umum spammer judol
+    t = fold(text)
+    t = URL_RE.sub(" ", t)
+    t = "".join(ch if _keep(ch) else " " for ch in t)
+    t = SPACED.sub(lambda m: m.group(0).replace(" ", ""), MULTI_SPACE.sub(" ", t))
+    words = [SLANG_MAP.get(w, w) for w in t.split() if any(unicodedata.category(c)[0] in "LN" or c == "#" for c in w)]
+    return " ".join(words)
+
+
+def promoted_entities(post):
+    """Target promosi dalam post: tagar, mention, kode merek, dan URL ternormalisasi.
+    Operasi selalu MENDORONG sesuatu; ini yang membedakannya dari slogan organik."""
+    raw = fold(post.get("content") or "")
+    ents = {h.lower() for h in (post.get("hashtags") or [])}
+    # mention & kode merek disatukan: "@MMM5" dan "MMM5" adalah target yang sama;
+    # kunci skeleton menyamakan homoglyph (VlKlNG27 = VIKING27)
+    ents |= {skeleton(m.strip("_")) for m in MENTION.findall(raw)}
+    ents |= {skeleton(w) for w in normalize_text(raw).split() if CODE.match(w) and not UNIT.match(w) and not REDUP.match(w)}
+    ents |= {"url:" + normalize_url(u) for u in (post.get("urls") or [])}
+    return ents
 
 
 def normalize_url(u):
@@ -89,12 +141,15 @@ class FeatureExtractor:
         accs = [p["account_id"] for p in posts]
         urls = [{normalize_url(u) for u in (p.get("urls") or [])} for p in posts]
 
-        tag_accounts = defaultdict(set)
-        for p in posts:
-            for h in p.get("hashtags") or []:
-                tag_accounts[h.lower()].add(p["account_id"])
-        rare = {h for h, s in tag_accounts.items() if 2 <= len(s) <= cfg.RARE_HASHTAG_MAX_ACCOUNTS}
-        tags = [{h.lower() for h in (p.get("hashtags") or [])} & rare for p in posts]
+        # target promosi langka (tagar, mention, kode merek) — dipakai 2..N akun
+        ents_all = [{e for e in promoted_entities(p) if not e.startswith("url:")} for p in posts]
+        ent_accounts = defaultdict(set)
+        for p, es in zip(posts, ents_all):
+            for e in es:
+                ent_accounts[e].add(p["account_id"])
+        rare = {e for e, s in ent_accounts.items() if 2 <= len(s) <= cfg.RARE_HASHTAG_MAX_ACCOUNTS}
+        self.rare_entities = rare
+        tags = [es & rare for es in ents_all]
 
         events = defaultdict(list)
         n = len(posts)
@@ -114,8 +169,11 @@ class FeatureExtractor:
                     types.append("content")
                 if urls[i] & urls[j]:
                     types.append("url")
-                if tags[i] & tags[j]:
+                shared = tags[i] & tags[j]
+                if any(e.startswith("#") for e in shared):
                     types.append("hashtag")
+                if any(not e.startswith("#") for e in shared):
+                    types.append("entity")
                 if not types:
                     continue
                 pair = tuple(sorted((accs[i], accs[j])))
@@ -131,7 +189,7 @@ class FeatureExtractor:
         """Bobot edge = jumlah EPISODE co-action yang terpisah waktu.
         Event yang berjarak < 2x jendela koordinasi digabung menjadi satu episode,
         sehingga satu event viral (mis. gempa) hanya dihitung sekali.
-        Episode yang hanya berbagi tagar dihitung 0.5 (sinyal lebih lemah)."""
+        Episode yang hanya berbagi tagar/mention/kode dihitung 0.5 (sinyal lebih lemah)."""
         gap = 2 * Config.COORDINATION_WINDOW_MIN * 60
         ws, last_t, cur = [], None, 0.0
         for e in sorted(evts, key=lambda e: e["t"]):

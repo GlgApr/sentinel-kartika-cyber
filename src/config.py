@@ -31,6 +31,10 @@ class Config:
     MIN_EDGE_WEIGHT = 2             # minimal 2 kejadian co-action agar edge dihitung (kurangi kebetulan)
     MIN_CLUSTER_SIZE = 3            # minimal akun per campaign
     RARE_HASHTAG_MAX_ACCOUNTS = 40  # tagar dipakai <= N akun dianggap "langka" (bukan tagar umum)
+    # Motif: dua gelombang yang sama-sama mendorong target (mention/kode merek/URL)
+    # dianggap satu operasi bila templat teksnya (tanpa target) mirip >= nilai ini.
+    # Lebih rendah dari SIMILARITY_THRESHOLD karena syarat target sudah menyaring.
+    MOTIF_TEMPLATE_SIM = 0.40
 
     # ---------- Burst detection ----------
     BURST_WINDOW_MINUTES = 60

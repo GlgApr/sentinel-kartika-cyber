@@ -146,6 +146,8 @@ if __name__ == "__main__":
         f.write("| Kesulitan | Metode | Precision | Recall | F1 |\n|---|---|---|---|---|\n")
         for r in rows:
             f.write(f"| {r['difficulty']:.1f} | {r['method']} | {r['precision']:.1%} | {r['recall']:.1%} | {r['f1']:.1%} |\n")
-        f.write(f"\n## Buzzer detector per akun\n\nTanpa sinyal jaringan, ambang skor 25: precision "
-                f"{bz['precision']:.1%}, recall {bz['recall']:.1%}, F1 {bz['f1']:.1%}.\n")
+        f.write(f"\n## Buzzer detector per akun (HANYA data sintetis)\n\nTanpa sinyal jaringan, ambang skor 25: precision "
+                f"{bz['precision']:.1%}, recall {bz['recall']:.1%}, F1 {bz['f1']:.1%}.\n\n"
+                "**Tidak berlaku di data asli**: pada Cresci-2017 AUC lensa ini 0,32–0,55 (tidak lebih baik dari acak). "
+                "Lihat [uji-data-asli.md](uji-data-asli.md) untuk hasil pada data asli.\n")
     print(f"\nTabel disimpan ke {out}")

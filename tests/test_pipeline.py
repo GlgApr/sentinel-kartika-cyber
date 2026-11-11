@@ -101,3 +101,55 @@ def test_buzzer_flags_scheduled_copypasta_bot():
     r = analyze_account({"username": "netizen_88231", "created_at": "2026-10-25", "followers": 3, "following": 900,
                          "bio": ""}, posts, [])
     assert r["score"] >= 50 and r["verdict"] in ("Bot atau akun otomatis", "Akun spam atau promosi")
+
+
+def test_promoted_entities_real_world_tricks():
+    from feature_extraction import promoted_entities
+    # huruf unicode "fancy" & mention dinormalisasi ke kode merek yang sama
+    assert "game191" in promoted_entities({"content": "@𝐆𝐀𝐌𝐄𝟏𝟗𝟏🤎❤"})
+    assert promoted_entities({"content": "XV99 คืออะไรหรอค่ะ💜"}) == {"xv99"}
+    # homoglyph & angka dekoratif: tiga ejaan ini merek yang sama
+    assert promoted_entities({"content": "@VlKlNG27_ happy"}) == promoted_entities({"content": "@𝐕𝐈𝐊𝐈𝐍𝐆➋➐_ hi"}) == {"viking27"}
+    # kata ulang & satuan Indonesia BUKAN kode merek
+    assert promoted_entities({"content": "laki2 tiba2 beli beras 5kg 80rb"}) == set()
+
+
+def test_motif_links_slot_spam_across_waves_but_not_slogans(tmp_path):
+    """Pola spam komentar asli: tiap akun muncul sekali, kode merek berganti,
+    tapi templatnya berulang di beberapa gelombang -> satu operasi.
+    Slogan organik tanpa target promosi tidak boleh ter-flag."""
+    from evaluation import _MemDB
+    posts, n = [], 0
+    waves = [("2026-11-05T15:0", "MMM5", ["a1", "a2", "a3"]), ("2026-11-05T23:2", "XV99", ["b1", "b2", "b3"]),
+             ("2026-11-06T00:1", "8DDD", ["c1", "c2"]), ("2026-11-07T11:1", "XV99", ["d1", "d2"])]
+    for t0, code, accs in waves:
+        for k, a in enumerate(accs):
+            posts.append({"post_id": f"p{n}", "account_id": a, "content": f"@{code} คืออะไรหรอ🫶🫶",
+                          "timestamp": f"{t0}{k}:00", "hashtags": [], "urls": []}); n += 1
+    for t0 in ("2026-11-05T10:0", "2026-11-06T10:0", "2026-11-07T10:0"):
+        for k, a in enumerate(["s1", "s2", "s3"]):
+            posts.append({"post_id": f"p{n}", "account_id": f"{a}{t0[9]}", "content": "nkri harga mati",
+                          "timestamp": f"{t0}{k}:00", "hashtags": [], "urls": []}); n += 1
+    accs = [{"account_id": a, "metadata": {}} for a in {p["account_id"] for p in posts}]
+    eng = DetectionEngine(db=_MemDB(posts, accs))
+    flagged = [c for c in eng.detect(posts, eng.db.get_accounts()) if c["status"] == "flagged"]
+    assert len(flagged) == 1
+    assert set(flagged[0]["accounts"]) == {"a1", "a2", "a3", "b1", "b2", "b3", "c1", "c2", "d1", "d2"}
+
+
+def test_slow_drip_template_operation_without_sync():
+    """Spam judol 'tetes lambat': berhari-hari, tidak serentak, templat diulang sambil
+    memutar kode merek. Kutipan meme (1 target, 1 templat) tidak boleh ter-flag."""
+    from evaluation import _MemDB
+    tpl = ["@{} MAIN SANTAI AJA BG, YANG PENTING ADA SENSASI PECAH🥰", "@{} Yang penting bukti nyata boss🔥"]
+    plan = [("SENJA57", 0), ("SENJA57", 1), ("PANDA40", 0), ("PANDA40", 1), ("PETIR84", 0), ("SENJA57", 0)]
+    posts = [{"post_id": f"s{i}", "account_id": f"spam{i}", "content": tpl[t].format(code),
+              "timestamp": f"2026-10-{10 + 3 * i:02d}T0{i}:00:00", "hashtags": [], "urls": []}
+             for i, (code, t) in enumerate(plan)]
+    posts += [{"post_id": f"m{i}", "account_id": f"fan{i}", "content": "@akun_kutipan: aku cinta negeri ini tapi masa depanku belum jelas",
+               "timestamp": f"2026-10-{11 + 4 * i:02d}T10:00:00", "hashtags": [], "urls": []} for i in range(4)]
+    accs = [{"account_id": a, "metadata": {}} for a in {p["account_id"] for p in posts}]
+    eng = DetectionEngine(db=_MemDB(posts, accs))
+    flagged = [c for c in eng.detect(posts, eng.db.get_accounts()) if c["status"] == "flagged"]
+    assert len(flagged) == 1 and flagged[0]["pattern"] == "template"
+    assert set(flagged[0]["accounts"]) == {f"spam{i}" for i in range(6)}

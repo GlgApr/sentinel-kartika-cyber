@@ -381,9 +381,12 @@ def page_account():
     from connectors import ScrapeCreators, get_scrapecreators_key, mask_identity
 
     st.title("Profil akun")
-    st.markdown("<div class='sub'>Buzzer detector per akun. Menilai identitas, ritme posting, pola konten, "
-                "kewajaran interaksi dan keterlibatan jaringan, lalu menjelaskan setiap alasannya</div>",
+    st.markdown("<div class='sub'>Lembar konteks per akun: identitas, ritme posting, pola konten, kewajaran "
+                "interaksi dan keterlibatan jaringan, dengan alasan tertulis untuk setiap sinyal</div>",
                 unsafe_allow_html=True)
+    st.caption("Skor per akun adalah indikator, bukan vonis. Pada dataset bot berlabel Cresci-2017 heuristik per akun "
+               "tidak lebih baik dari acak, sejalan dengan riset bahwa bot modern hanya terlihat di level kelompok. "
+               "Bukti yang tervalidasi adalah keanggotaan akun dalam operasi terkoordinasi (sinyal Keterlibatan jaringan).")
     key = get_scrapecreators_key()
     modes = ["Akun di data aktif"] + (["Cek akun TikTok"] if key else [])
     mode = st.segmented_control("Mode", modes, default=modes[0], label_visibility="collapsed")
@@ -646,10 +649,11 @@ def page_method():
     st.markdown(f"""
 | Tahap | Teknik | Tujuan |
 |---|---|---|
-| Normalisasi | Kamus slang medsos Indonesia, hapus URL dan emoji | Menyamakan variasi ejaan operator |
+| Normalisasi | NFKC (huruf unicode "fancy" → biasa), semua aksara dipertahankan, kamus slang, homoglyph kode merek | Menyamakan trik ejaan operator dan spammer judol |
 | Representasi | TF-IDF char n-gram 3–5 | Tahan typo dan parafrase ringan, tanpa GPU |
-| Co-action | Jendela ≤ {Config.COORDINATION_WINDOW_MIN} menit: narasi mirip, URL sama, tagar langka sama | Menangkap aksi serentak |
-| Graf koordinasi | Garis hanya bila co-action berulang di ≥ {Config.MIN_EDGE_WEIGHT:g} episode | Menyaring kebetulan dan viral organik |
+| Co-action | Jendela ≤ {Config.COORDINATION_WINDOW_MIN} menit: narasi mirip, URL sama, tagar/mention/kode merek langka sama | Menangkap aksi serentak |
+| Graf koordinasi | Garis hanya bila koordinasi berulang: pasangan yang sama di ≥ {Config.MIN_EDGE_WEIGHT:g} episode, atau motif (templat + target) yang sama di ≥ 2 gelombang | Menyaring kebetulan dan viral organik |
+| Operasi templat | Graf templat ↔ target: satu templat memutar banyak merek, tanpa keserempakan | Menangkap spam judol "tetes lambat" |
 | Clustering | Louvain + 2-core | Memisahkan operasi, membuang akun yang ikut secara kebetulan |
 | Skor | Konten {Config.SCORING_WEIGHTS['content']:.0%}, waktu {Config.SCORING_WEIGHTS['timing']:.0%}, akun {Config.SCORING_WEIGHTS['account']:.0%}, jaringan {Config.SCORING_WEIGHTS['network']:.0%}, amplifikasi {Config.SCORING_WEIGHTS['amplification']:.0%} | Skor yang bisa dijelaskan |
 | Triage | Keputusan analis, catatan, laporan, hash bukti | Manusia tetap memutuskan |
@@ -666,7 +670,7 @@ def page_method():
     if b is None:
         b = pd.DataFrame([
             {"difficulty": d, "method": m, "f1": f} for d, vals in
-            {0.0: (1.0, .2248, .3604), 0.5: (.9526, .1761, .3467), 1.0: (.68, .1631, .341)}.items()
+            {0.0: (1.0, .2248, .3604), 0.5: (1.0, .1761, .3467), 1.0: (.9456, .1631, .341)}.items()
             for m, f in zip(["SENTINEL", "Baseline A (burst monitor)", "Baseline B (duplicate filter)"], vals)])
         st.caption("Hasil tersimpan dari docs/benchmark.md. Tekan tombol untuk menghitung ulang")
     fig = go.Figure()
@@ -679,7 +683,20 @@ def page_method():
     fig.update_layout(barmode="group", bargap=0.35, yaxis_tickformat=".0%", yaxis_range=[0, 1.12])
     st.plotly_chart(plot_layout(fig, 320), width="stretch", config={"displayModeBar": False})
     st.caption("Precision SENTINEL 100% di semua tingkat: tidak ada akun organik yang dituduh. Pada penyamaran "
-               "tertinggi recall turun ke 52%, keterbatasan yang kami ungkap apa adanya")
+               "tertinggi recall turun ke 90%")
+
+    st.markdown("### Uji pada data asli")
+    st.markdown("Komentar TikTok Indonesia yang ditarik live, label akun spam judi online diperiksa manual. Angka di "
+                "bawah dari set **held-out**: kode dibekukan sebelum data ditarik (2.002 komentar, 69 akun spam)")
+    st.dataframe(pd.DataFrame([
+        {"Metode": "SENTINEL", "Precision": "100%", "Recall": "88%", "F1": "94%", "Akun dituduh salah": 0},
+        {"Metode": "Duplicate filter", "Precision": "13%", "Recall": "28%", "F1": "18%", "Akun dituduh salah": 124},
+        {"Metode": "Burst monitor", "Precision": "4%", "Recall": "99%", "F1": "8%", "Akun dituduh salah": 1617},
+    ]), hide_index=True, width="stretch")
+    st.markdown("**Yang belum bisa, diungkap apa adanya.** Pada dataset bot Twitter berlabel Cresci-2017, skor per "
+                "akun tidak lebih baik dari acak (AUC ≤ 0,55), dan lensa jaringan baru menangkap 29% bot retweet "
+                "yang tidak serentak. Satu alarm palsu muncul: kerumunan asli yang menjawab satu akun pemancing di "
+                "menit yang sama. Detail lengkap di docs/uji-data-asli.md")
     st.markdown("<div class='meta'>Desain antarmuka mengikuti metode unslop oleh Damir Sokolovsky, CC BY 4.0</div>",
                 unsafe_allow_html=True)
 
