@@ -210,3 +210,6 @@ def test_audit_log_and_stix_export(db):
     stix = json.loads(campaign_stix_bundle(c, db.get_campaign_accounts(cid), db.get_posts_by_campaign(cid)))
     assert stix["type"] == "bundle"
     assert any(o["type"] == "campaign" and o["spec_version"] == "2.1" for o in stix["objects"])
+    assert any(o["type"] == "attack-pattern" and o.get("external_references", [{}])[0].get("source_name") == "DISARM"
+               for o in stix["objects"])
+    assert any(o["type"] == "course-of-action" for o in stix["objects"])

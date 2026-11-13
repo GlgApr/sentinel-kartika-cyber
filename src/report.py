@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from detection_engine import SIGNAL_LABELS
+from feature_extraction import promoted_entities
 from config import Config
 
 RECOMMENDATION = {
@@ -20,6 +21,52 @@ RECOMMENDATION = {
     ],
     "RENDAH": ["Arsipkan sebagai referensi; tidak perlu tindakan segera."],
 }
+
+
+def classify_disarm_ttps(c, posts):
+    """Petakan indikator perilaku campaign ke taksonomi global DISARM Framework
+    (MITRE ATT&CK untuk operasi informasi) beserta countermeasure (DISARM Blue)."""
+    sig = c.get("signals") or {}
+    ttps = []
+    if sig.get("timing", 0) >= 0.6:
+        ttps.append({
+            "id": "T0049", "tactic": "TA09 · Maximise Exposure",
+            "name": "Flood Information Space (Synchronized Posting)",
+            "countermeasure_id": "M001", "countermeasure": "Rate-limit & pantau gelombang jam sibuk; siapkan kontra-narasi pre-bunking.",
+        })
+    if sig.get("content", 0) >= 0.6 or c.get("pattern") == "template":
+        ttps.append({
+            "id": "T0057", "tactic": "TA07 · Deliver Content",
+            "name": "Organise Copypasta / Template Rotation",
+            "countermeasure_id": "M002", "countermeasure": "Blokir templat & variasi homoglyph di filter moderasi platform.",
+        })
+    if sig.get("account", 0) >= 0.5:
+        ttps.append({
+            "id": "T0046", "tactic": "TA06 · Develop People",
+            "name": "Use Bots & Inauthentic Sockpuppet Accounts",
+            "countermeasure_id": "M003", "countermeasure": "Laporkan klaster akun baru/anonim ke platform untuk verifikasi identitas.",
+        })
+    if sig.get("amplification", 0) >= 0.6:
+        ttps.append({
+            "id": "T0049.002", "tactic": "TA09 · Maximise Exposure",
+            "name": "Coordinated Hashtag / URL Amplification",
+            "countermeasure_id": "M004", "countermeasure": "Ajukan takedown URL/tagar promosi ke Kominfo (aduankonten) & platform.",
+        })
+    funnels = {e for p in posts for e in promoted_entities(p) if e.startswith(("wa:", "tg:", "typosquat:"))}
+    if funnels:
+        ttps.append({
+            "id": "T0019", "tactic": "TA03 · Establish Legitimacy / Infrastructure",
+            "name": "Fraudulent Contact Funnel / Domain Typosquatting",
+            "countermeasure_id": "M005", "countermeasure": f"Blokir/suspend kanal kontak & domain palsu ({', '.join(sorted(funnels)[:3])}).",
+        })
+    platforms = {p.get("platform") for p in posts if p.get("platform")}
+    if len(platforms) > 1:
+        ttps.append({
+            "id": "T0002", "tactic": "TA01 · Plan Strategy",
+            "name": "Cross-Platform Narrative Seeding",
+            "countermeasure_id": "M006", "countermeasure": f"Sinkronkan pemantauan lintas platform ({', '.join(sorted(platforms))}).",
+        })
+    return ttps
 
 
 def campaign_brief(c, accounts, posts, max_posts=8):
@@ -54,8 +101,14 @@ def campaign_brief(c, accounts, posts, max_posts=8):
         txt = p["content"].replace("|", "/")
         lines.append(f"| {p['timestamp'][:16].replace('T', ' ')} | {p['account_id']} | {txt} |")
     lines += ["", "## 5. Rekomendasi Tindak Lanjut"] + [f"- {r}" for r in RECOMMENDATION[c["risk_level"]]]
+    ttps = classify_disarm_ttps(c, posts)
+    if ttps:
+        lines += ["", "## 6. Pemetaan DISARM Framework (Standar Global FIMI)",
+                  "| ID | Taktik | Teknik | Countermeasure (DISARM Blue) |", "|---|---|---|---|"]
+        for t in ttps:
+            lines.append(f"| {t['id']} | {t['tactic']} | {t['name']} | {t['countermeasure']} |")
     if c.get("analyst_note"):
-        lines += ["", "## 6. Catatan Analis", c["analyst_note"]]
+        lines += ["", "## 7. Catatan Analis", c["analyst_note"]]
     lines += ["", "---", "*Skor bersifat pendukung keputusan; keputusan akhir tetap pada analis.*"]
     return "\n".join(lines)
 
@@ -149,6 +202,50 @@ def campaign_stix_bundle(c, accounts, posts):
             "relationship_type": "attributed-to",
             "source_ref": camp_id,
             "target_ref": ta_id,
+        })
+    for t in classify_disarm_ttps(c, posts):
+        ap_id = _stix_id("attack-pattern", t["id"])
+        coa_id = _stix_id("course-of-action", t["countermeasure_id"])
+        objects.append({
+            "type": "attack-pattern",
+            "spec_version": "2.1",
+            "id": ap_id,
+            "created": now,
+            "modified": now,
+            "created_by_ref": identity_id,
+            "name": f"{t['id']} — {t['name']}",
+            "description": t["tactic"],
+            "external_references": [{"source_name": "DISARM", "external_id": t["id"]}],
+        })
+        objects.append({
+            "type": "course-of-action",
+            "spec_version": "2.1",
+            "id": coa_id,
+            "created": now,
+            "modified": now,
+            "created_by_ref": identity_id,
+            "name": f"{t['countermeasure_id']} — Mitigasi {t['id']}",
+            "description": t["countermeasure"],
+        })
+        objects.append({
+            "type": "relationship",
+            "spec_version": "2.1",
+            "id": _stix_id("relationship", f"{camp_id}:uses:{ap_id}"),
+            "created": now,
+            "modified": now,
+            "relationship_type": "uses",
+            "source_ref": camp_id,
+            "target_ref": ap_id,
+        })
+        objects.append({
+            "type": "relationship",
+            "spec_version": "2.1",
+            "id": _stix_id("relationship", f"{coa_id}:mitigates:{ap_id}"),
+            "created": now,
+            "modified": now,
+            "relationship_type": "mitigates",
+            "source_ref": coa_id,
+            "target_ref": ap_id,
         })
     return json.dumps({
         "type": "bundle",

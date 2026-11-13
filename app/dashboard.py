@@ -27,9 +27,9 @@ from database import Database  # noqa: E402
 from detection_engine import SIGNAL_LABELS, DetectionEngine  # noqa: E402
 from feature_extraction import FeatureExtractor, parse_ts  # noqa: E402
 import report  # noqa: E402
-if not hasattr(report, "campaign_stix_bundle"):
+if not hasattr(report, "classify_disarm_ttps"):
     importlib.reload(report)
-from report import campaign_brief, campaign_stix_bundle  # noqa: E402
+from report import campaign_brief, campaign_stix_bundle, classify_disarm_ttps  # noqa: E402
 
 st.set_page_config(page_title="SENTINEL", page_icon=":material/radar:", layout="wide",
                    initial_sidebar_state="expanded")
@@ -292,6 +292,13 @@ def page_case():
     st.markdown("### Temuan")
     st.markdown("<ul class='findings'>" + "".join(f"<li>{e}</li>" for e in c["signal_summary"]) + "</ul>",
                 unsafe_allow_html=True)
+    ttps = classify_disarm_ttps(c, cposts.drop(columns=["ts"]).to_dict("records"))
+    if ttps:
+        with st.expander(f"Pemetaan DISARM Framework ({len(ttps)} TTP terdeteksi)", expanded=False):
+            st.dataframe(pd.DataFrame([{
+                "ID": t["id"], "Taktik": t["tactic"], "Teknik (DISARM Red)": t["name"],
+                "Countermeasure (DISARM Blue)": t["countermeasure"],
+            } for t in ttps]), hide_index=True, width="stretch")
 
     t1, t2, t3, t4 = st.tabs(["Bukti", "Jaringan", "Akun", "Tindakan dan laporan"])
     with t1:
