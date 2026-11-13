@@ -9,6 +9,7 @@
 # (github.com/heydamir/unslop, CC BY 4.0 — Damir Sokolovsky).
 
 import hashlib
+import importlib
 import sys
 import urllib.parse
 from pathlib import Path
@@ -25,6 +26,9 @@ from data_ingestion import generate_synthetic_dataset, ingest, load_dataframe  #
 from database import Database  # noqa: E402
 from detection_engine import SIGNAL_LABELS, DetectionEngine  # noqa: E402
 from feature_extraction import FeatureExtractor, parse_ts  # noqa: E402
+import report  # noqa: E402
+if not hasattr(report, "campaign_stix_bundle"):
+    importlib.reload(report)
 from report import campaign_brief, campaign_stix_bundle  # noqa: E402
 
 st.set_page_config(page_title="SENTINEL", page_icon=":material/radar:", layout="wide",
@@ -340,7 +344,7 @@ def page_case():
                     db.update_campaign_status(cid, new_status, note)
                     st.toast("Keputusan tersimpan")
                     st.rerun()
-            logs = db.get_audit_log(cid, limit=10)
+            logs = db.get_audit_log(cid, limit=10) if hasattr(db, "get_audit_log") else []
             if logs:
                 st.markdown("**Riwayat audit (chain of custody)**")
                 st.dataframe(pd.DataFrame([{
