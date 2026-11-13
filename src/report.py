@@ -1,7 +1,9 @@
-# Report Generator — Laporan Intelijen Singkat per campaign (Markdown)
+# Report Generator — Laporan Intelijen Singkat per campaign (Markdown & STIX 2.1)
 # SENTINEL · Kartika Cyber Hackathon 2026
 
-from datetime import datetime
+import json
+import uuid
+from datetime import datetime, timezone
 
 from detection_engine import SIGNAL_LABELS
 from config import Config
@@ -56,3 +58,100 @@ def campaign_brief(c, accounts, posts, max_posts=8):
         lines += ["", "## 6. Catatan Analis", c["analyst_note"]]
     lines += ["", "---", "*Skor bersifat pendukung keputusan; keputusan akhir tetap pada analis.*"]
     return "\n".join(lines)
+
+
+def _stix_id(kind, seed):
+    return f"{kind}--{uuid.uuid5(uuid.NAMESPACE_URL, f'sentinel:{kind}:{seed}')}"
+
+
+def _stix_ts(s):
+    if not s:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return s[:19] + "Z" if "T" in s else s
+
+
+def campaign_stix_bundle(c, accounts, posts):
+    """Ekspor temuan campaign ke format standar STIX 2.1 JSON (kompatibel MISP/OpenCTI/SOC)."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    identity_id = _stix_id("identity", "pussiberad-sentinel")
+    camp_id = _stix_id("campaign", c["campaign_id"])
+    objects = [
+        {
+            "type": "identity",
+            "spec_version": "2.1",
+            "id": identity_id,
+            "created": now,
+            "modified": now,
+            "name": f"{Config.APP_NAME} (PUSSIBERAD Siber Sosial)",
+            "identity_class": "organization",
+        },
+        {
+            "type": "campaign",
+            "spec_version": "2.1",
+            "id": camp_id,
+            "created": now,
+            "modified": now,
+            "created_by_ref": identity_id,
+            "name": f"{c['campaign_id']} — {c['description']}",
+            "description": "; ".join(c.get("signal_summary") or []),
+            "first_seen": _stix_ts(c.get("first_seen")),
+            "last_seen": _stix_ts(c.get("last_seen")),
+            "objective": c.get("topic_keywords") or "Coordinated Inauthentic Behavior",
+            "labels": ["coordinated-inauthentic-behavior", f"risk-{c['risk_level'].lower()}"],
+            "x_sentinel_score": round(float(c["flag_score"]), 4),
+            "x_sentinel_signals": c.get("signals") or {},
+        },
+    ]
+    urls = sorted({u for p in posts for u in (p.get("urls") or [])})
+    for u in urls[:20]:
+        ind_id = _stix_id("indicator", u)
+        objects.append({
+            "type": "indicator",
+            "spec_version": "2.1",
+            "id": ind_id,
+            "created": now,
+            "modified": now,
+            "created_by_ref": identity_id,
+            "name": f"Promoted URL: {u}",
+            "pattern": f"[url:value = '{u}']",
+            "pattern_type": "stix",
+            "valid_from": _stix_ts(c.get("first_seen")),
+        })
+        objects.append({
+            "type": "relationship",
+            "spec_version": "2.1",
+            "id": _stix_id("relationship", f"{camp_id}:{ind_id}"),
+            "created": now,
+            "modified": now,
+            "relationship_type": "indicates",
+            "source_ref": ind_id,
+            "target_ref": camp_id,
+        })
+    for a in [x for x in accounts if x.get("role") == "hub"][:10]:
+        ta_id = _stix_id("threat-actor", a["account_id"])
+        objects.append({
+            "type": "threat-actor",
+            "spec_version": "2.1",
+            "id": ta_id,
+            "created": now,
+            "modified": now,
+            "created_by_ref": identity_id,
+            "name": a["account_id"],
+            "threat_actor_types": ["disinformation-agent"],
+            "roles": ["hub"],
+        })
+        objects.append({
+            "type": "relationship",
+            "spec_version": "2.1",
+            "id": _stix_id("relationship", f"{ta_id}:{camp_id}"),
+            "created": now,
+            "modified": now,
+            "relationship_type": "attributed-to",
+            "source_ref": camp_id,
+            "target_ref": ta_id,
+        })
+    return json.dumps({
+        "type": "bundle",
+        "id": f"bundle--{uuid.uuid5(uuid.NAMESPACE_URL, c['campaign_id'])}",
+        "objects": objects,
+    }, indent=2, ensure_ascii=False)

@@ -25,7 +25,7 @@ from data_ingestion import generate_synthetic_dataset, ingest, load_dataframe  #
 from database import Database  # noqa: E402
 from detection_engine import SIGNAL_LABELS, DetectionEngine  # noqa: E402
 from feature_extraction import FeatureExtractor, parse_ts  # noqa: E402
-from report import campaign_brief  # noqa: E402
+from report import campaign_brief, campaign_stix_bundle  # noqa: E402
 
 st.set_page_config(page_title="SENTINEL", page_icon=":material/radar:", layout="wide",
                    initial_sidebar_state="expanded")
@@ -340,11 +340,25 @@ def page_case():
                     db.update_campaign_status(cid, new_status, note)
                     st.toast("Keputusan tersimpan")
                     st.rerun()
+            logs = db.get_audit_log(cid, limit=10)
+            if logs:
+                st.markdown("**Riwayat audit (chain of custody)**")
+                st.dataframe(pd.DataFrame([{
+                    "Waktu": l["timestamp"], "Analis": l["actor"],
+                    "Status": f"{STATUS_LABEL.get(l['old_status'], l['old_status'] or '-')} -> {STATUS_LABEL.get(l['new_status'], l['new_status'])}",
+                    "Catatan": l["note"] or "-",
+                } for l in logs]), hide_index=True, width="stretch")
         with right:
-            brief = campaign_brief(c, accs, cposts.drop(columns=["ts"]).to_dict("records"))
+            post_records = cposts.drop(columns=["ts"]).to_dict("records")
+            brief = campaign_brief(c, accs, post_records)
+            stix = campaign_stix_bundle(c, accs, post_records)
             st.markdown("Laporan intelijen singkat berisi ringkasan, indikator, akun penggerak, contoh bukti "
                         "dan rekomendasi tindak lanjut sesuai tingkat risiko")
-            st.download_button("Unduh laporan (Markdown)", brief, f"laporan_{cid}.md", "text/markdown", type="primary")
+            b1, b2 = st.columns(2)
+            with b1:
+                st.download_button("Unduh laporan (Markdown)", brief, f"laporan_{cid}.md", "text/markdown", type="primary")
+            with b2:
+                st.download_button("Unduh STIX 2.1 (JSON)", stix, f"stix_{cid}.json", "application/json")
             with st.expander("Pratinjau laporan"):
                 st.markdown(brief)
 

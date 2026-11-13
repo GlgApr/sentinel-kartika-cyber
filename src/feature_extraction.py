@@ -71,9 +71,22 @@ def fold(text):
 DISPLAY = {}  # kunci skeleton -> ejaan asli pertama yang terlihat (untuk ditampilkan ke analis)
 
 
+# Normalisasi homoglyph lintas-aksara (Cyrillic -> Latin; NFKC tidak mengonversi Cyrillic)
+CONFUSABLE_MAP = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
+    "х": "x", "у": "y", "і": "i", "к": "k", "м": "m", "т": "t",
+})
+
+# Funnel kontak & infrastruktur penipuan (hoaks rekrutmen / phishing)
+WA_URL_RE = re.compile(r"wa\.me/(\+?628\d{7,11}|08\d{7,11})", re.I)
+PHONE_ID_RE = re.compile(r"(?<!\d)(?:\+?62[\s\-]?|0)8\d{2}[\s\-]?\d{3,4}[\s\-]?\d{3,5}(?!\d)")
+TG_RE = re.compile(r"(?:t\.me|telegram\.me)/([a-z0-9_]{4,})", re.I)
+TYPOSQUAT_KW = ("tni", "tniad", "bintara", "rekrutmen", "mabestni", "prajurit")
+
+
 def skeleton(code):
-    """Kunci pembanding kode merek tahan homoglyph: vlklng27 / viking27 -> viking27."""
-    key = code.replace("l", "i").replace("|", "i")
+    """Kunci pembanding kode merek tahan homoglyph: vlklng27 / vіkіng27 -> viking27."""
+    key = code.translate(CONFUSABLE_MAP).replace("l", "i").replace("|", "i")
     DISPLAY.setdefault(key, code)
     return key
 
@@ -92,16 +105,37 @@ def normalize_text(text):
     return " ".join(words)
 
 
+def _norm_wa(num):
+    d = re.sub(r"\D", "", num)
+    if d.startswith("0"):
+        d = "62" + d[1:]
+    return "wa:" + d
+
+
 def promoted_entities(post):
-    """Target promosi dalam post: tagar, mention, kode merek, dan URL ternormalisasi.
+    """Target promosi dalam post: tagar, mention, kode merek, funnel kontak (WA/TG),
+    domain typosquatting, dan URL ternormalisasi.
     Operasi selalu MENDORONG sesuatu; ini yang membedakannya dari slogan organik."""
-    raw = fold(post.get("content") or "")
+    content = post.get("content") or ""
+    raw = fold(content)
     ents = {h.lower() for h in (post.get("hashtags") or [])}
     # mention & kode merek disatukan: "@MMM5" dan "MMM5" adalah target yang sama;
     # kunci skeleton menyamakan homoglyph (VlKlNG27 = VIKING27)
     ents |= {skeleton(m.strip("_")) for m in MENTION.findall(raw)}
     ents |= {skeleton(w) for w in normalize_text(raw).split() if CODE.match(w) and not UNIT.match(w) and not REDUP.match(w)}
-    ents |= {"url:" + normalize_url(u) for u in (post.get("urls") or [])}
+    # funnel kontak penipuan: nomor WA / HP Indonesia & kanal Telegram
+    for m in WA_URL_RE.findall(raw):
+        ents.add(_norm_wa(m))
+    for m in PHONE_ID_RE.findall(raw):
+        ents.add(_norm_wa(m))
+    for m in TG_RE.findall(raw):
+        ents.add("tg:" + m.lower())
+    for u in (post.get("urls") or []):
+        nu = normalize_url(u)
+        ents.add("url:" + nu)
+        dom = nu.split("/")[0]
+        if any(kw in dom for kw in TYPOSQUAT_KW) and not dom.endswith((".mil.id", ".go.id")):
+            ents.add("typosquat:" + dom)
     return ents
 
 
@@ -174,8 +208,19 @@ class FeatureExtractor:
                     types.append("hashtag")
                 if any(not e.startswith("#") for e in shared):
                     types.append("entity")
+                if any(e.startswith(("wa:", "tg:", "typosquat:")) for e in shared):
+                    types.append("funnel")
                 if not types:
                     continue
+                # Anti-prompt guard: jika dua post hanya berbagi @mention di awal kalimat
+                # (pola balasan organik ke 1 akun pemancing/berita) tanpa kemiripan narasi,
+                # URL, kode merek, atau funnel WA/TG -> abaikan agar tidak jadi false positive.
+                if types == ["entity"] and sim < cfg.SIMILARITY_THRESHOLD:
+                    ci = (posts[i].get("content") or "").lstrip()
+                    cj = (posts[j].get("content") or "").lstrip()
+                    strong_shared = {e for e in shared if e.startswith(("wa:", "tg:", "typosquat:")) or CODE.match(e)}
+                    if not strong_shared and ci.startswith("@") and cj.startswith("@"):
+                        continue
                 pair = tuple(sorted((accs[i], accs[j])))
                 # episode = blok waktu jendela-koordinasi; co-action berulang di
                 # episode berbeda adalah sinyal kuat (bukan kebetulan sekali).
@@ -193,7 +238,7 @@ class FeatureExtractor:
         gap = 2 * Config.COORDINATION_WINDOW_MIN * 60
         ws, last_t, cur = [], None, 0.0
         for e in sorted(evts, key=lambda e: e["t"]):
-            w = 1.0 if ("content" in e["types"] or "url" in e["types"]) else 0.5
+            w = 1.0 if ("content" in e["types"] or "url" in e["types"] or "funnel" in e["types"]) else 0.5
             if last_t is None or e["t"] - last_t > gap:
                 if last_t is not None:
                     ws.append(cur)

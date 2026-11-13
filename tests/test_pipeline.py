@@ -13,7 +13,7 @@ from database import Database  # noqa: E402
 from detection_engine import DetectionEngine  # noqa: E402
 from evaluation import evaluate_once  # noqa: E402
 from feature_extraction import normalize_text  # noqa: E402
-from report import campaign_brief  # noqa: E402
+from report import campaign_brief, campaign_stix_bundle  # noqa: E402
 
 
 @pytest.fixture
@@ -153,3 +153,60 @@ def test_slow_drip_template_operation_without_sync():
     flagged = [c for c in eng.detect(posts, eng.db.get_accounts()) if c["status"] == "flagged"]
     assert len(flagged) == 1 and flagged[0]["pattern"] == "template"
     assert set(flagged[0]["accounts"]) == {f"spam{i}" for i in range(6)}
+
+
+def test_cyrillic_homoglyph_and_contact_funnel_extraction():
+    from feature_extraction import promoted_entities
+    # Cyrillic 'і' (U+0456) & 'а'/'е' harus tetap menyatu dengan Latin
+    assert "viking27" in promoted_entities({"content": "@vіkіng27_ promo"})
+    assert "game191" in promoted_entities({"content": "@gаmе191"})
+    # Nomor HP 08xx dan link wa.me harus menghasilkan entitas funnel WA yang identik
+    e1 = promoted_entities({"content": "Info jalur khusus hubungi 0812-3456-7890 segera"})
+    e2 = promoted_entities({"content": "Daftar cepat klik wa.me/6281234567890 atau t.me/jalur_tni",
+                            "urls": ["https://rekrutmen-tniad.xyz/daftar"]})
+    assert "wa:6281234567890" in e1 and "wa:6281234567890" in e2
+    assert "tg:jalur_tni" in e2 and "typosquat:rekrutmen-tniad.xyz" in e2
+
+
+def test_funnel_catches_paraphrased_hoax_and_blocks_reply_prompt_fp():
+    """Paraphrase teks berbeda-beda tapi mengarah ke nomor WA penipu yang sama -> ter-flag.
+    Kerumunan organik yang membalas @info_gempa tanpa kesamaan narasi/funnel -> TIDAK ter-flag."""
+    from evaluation import _MemDB
+    posts = []
+    # 4 akun hoaks rekrutmen TNI AD dengan kalimat berbeda (anti-parafrase), 2 episode, WA sama
+    paraphrases = [
+        "Buat adik-adik yang minat masuk Bintara tanpa tes, silakan kontak WA 0812-9988-7766",
+        "Pendaftaran jalur khusus TNI AD dibuka hari ini, chat admin di wa.me/6281299887766",
+        "Mau lolos seleksi cepat? Hubungi panitia resmi di 081299887766 sebelum kuota penuh",
+        "Kesempatan terbatas masuk satuan, langsung daftar via 6281299887766 sekarang juga",
+    ]
+    for ep, day in enumerate(("2026-11-01T10:0", "2026-11-02T14:0")):
+        for i, txt in enumerate(paraphrases):
+            posts.append({"post_id": f"h{ep}_{i}", "account_id": f"hoax_{i}", "content": txt,
+                          "timestamp": f"{day}{i}:00", "hashtags": [], "urls": []})
+    # 4 akun organik membalas @info_gempa di 2 hari berbeda dengan kalimat berbeda
+    replies = ["Iya kerasa banget di Bandung", "Di Bogor goyang sebentar tadi",
+               "Alhamdulillah di sini aman terkendali", "Baru aja kerasa getarannya di lantai 3"]
+    for ep, day in enumerate(("2026-11-01T12:0", "2026-11-02T16:0")):
+        for i, txt in enumerate(replies):
+            posts.append({"post_id": f"g{ep}_{i}", "account_id": f"warga_{i}", "content": f"@info_gempa {txt}",
+                          "timestamp": f"{day}{i}:00", "hashtags": [], "urls": []})
+    accs = [{"account_id": a, "metadata": {"created_at": "2026-10-20", "followers": 12}}
+            for a in {p["account_id"] for p in posts}]
+    eng = DetectionEngine(db=_MemDB(posts, accs))
+    flagged = [c for c in eng.detect(posts, eng.db.get_accounts()) if c["status"] == "flagged"]
+    assert len(flagged) == 1
+    assert set(flagged[0]["accounts"]) == {f"hoax_{i}" for i in range(4)}
+
+
+def test_audit_log_and_stix_export(db):
+    import json
+    DetectionEngine(db).run_detection_pipeline(verbose=False)
+    c = db.get_campaigns()[0]
+    cid = c["campaign_id"]
+    db.update_campaign_status(cid, "escalated", "Eskalasi ke PUSSIBERAD", actor="analis_1")
+    logs = db.get_audit_log(cid)
+    assert len(logs) == 1 and logs[0]["new_status"] == "escalated" and logs[0]["actor"] == "analis_1"
+    stix = json.loads(campaign_stix_bundle(c, db.get_campaign_accounts(cid), db.get_posts_by_campaign(cid)))
+    assert stix["type"] == "bundle"
+    assert any(o["type"] == "campaign" and o["spec_version"] == "2.1" for o in stix["objects"])

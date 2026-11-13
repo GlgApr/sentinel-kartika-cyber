@@ -79,6 +79,17 @@ CREATE TABLE IF NOT EXISTS detection_runs (
     campaign_count INTEGER,
     params      TEXT
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id TEXT,
+    timestamp   TEXT,
+    actor       TEXT,
+    action      TEXT,
+    old_status  TEXT,
+    new_status  TEXT,
+    note        TEXT
+);
 """
 
 
@@ -264,10 +275,23 @@ class Database:
         r = self.conn.execute("SELECT * FROM detection_runs ORDER BY started_at DESC LIMIT 1").fetchone()
         return dict(r) if r else None
 
-    def update_campaign_status(self, campaign_id, status, note=None):
+    def update_campaign_status(self, campaign_id, status, note=None, actor="analis"):
+        row = self.conn.execute("SELECT status FROM campaigns WHERE campaign_id=?", (campaign_id,)).fetchone()
+        old_status = row["status"] if row else None
         self.conn.execute("UPDATE campaigns SET status=?, analyst_note=COALESCE(?, analyst_note) WHERE campaign_id=?",
                           (status, note, campaign_id))
+        self.conn.execute(
+            "INSERT INTO audit_log (campaign_id, timestamp, actor, action, old_status, new_status, note) VALUES (?,?,?,?,?,?,?)",
+            (campaign_id, now_iso(), actor, "triage", old_status, status, note))
         self.conn.commit()
+
+    def get_audit_log(self, campaign_id=None, limit=50):
+        if campaign_id:
+            rows = self.conn.execute(
+                "SELECT * FROM audit_log WHERE campaign_id=? ORDER BY id DESC LIMIT ?", (campaign_id, limit))
+        else:
+            rows = self.conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))
+        return [dict(r) for r in rows]
 
     # ------------------------------------------------------------------ misc
     def close(self):

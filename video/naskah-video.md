@@ -71,9 +71,10 @@ Narasi ditulis untuk dibaca santai (±130 kata per menit). Bagian dalam [kurung 
 
 > Tab Jaringan menunjukkan siapa penggerak dan siapa penguat.
 
-[Tab Tindakan dan laporan → pilih keputusan → tunjuk laporan]
+[Tab Tindakan dan laporan → pilih keputusan → tunjuk riwayat audit & tombol unduh Markdown / STIX 2.1]
 
-> Terakhir, analis yang memutuskan: tinjau, eskalasi, atau abaikan. Laporan intelijen siap kirim dibuat otomatis.
+> Terakhir, analis yang memutuskan: tinjau, eskalasi, atau abaikan—setiap keputusan tercatat di riwayat audit.
+> Laporan intelijen siap kirim dibuat otomatis dalam format Markdown maupun standar STIX 2.1 JSON untuk integrasi SOC.
 > SENTINEL memberi rekomendasi, manusia yang memutuskan.
 
 ## 4:00–4:40 · Demo: Sumber data dan Profil akun (singkat)
